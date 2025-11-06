@@ -84,6 +84,7 @@
       font-size: 12px;
       font-weight: bold;
       box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      transition: transform 0.5s linear;
     }
 
     .bus.up { left: calc(50% - 60px); background: #e67e22; }
@@ -156,9 +157,9 @@
   }
 
   function buildStops(names){
-    const baseSpacing = 150; // 車庫～五日市駅南口の間隔
-    const longSpacing = baseSpacing * 3; // 五日市駅南口～広島工大の間隔
-    let y = 100;
+    const baseSpacing = 150;  // 車庫～五日市駅南口
+    const longSpacing = baseSpacing * 3; // 五日市駅南口～広島工大
+    let y = 100; // 最初の位置
 
     names.forEach((name, i)=>{
       const s = document.createElement('div');
@@ -167,13 +168,13 @@
       s.style.top = y + 'px';
       tracker.appendChild(s);
       stops.push({name, y});
-      // 間隔調整
+      // 停留所間の距離設定
       if (i === 0) y += baseSpacing;
       else if (i === 1) y += longSpacing;
     });
 
-    // tracker高さを全体に合わせる
-    tracker.style.height = (y + 150) + 'px';
+    // 最下部に余白を追加して重なり防止
+    tracker.style.height = (y + 200) + 'px';
   }
 
   function mapIndex(i, dir){
@@ -203,7 +204,8 @@
         const y1 = stops[mapIndex(idx+1,bus.direction)].y;
         y = lerp(y0, y1, f);
       }
-      bus.el.style.transform = `translateY(${y-12}px)`;
+      // バス位置を調整（上下中央合わせ）
+      bus.el.style.transform = `translateY(${y - 12}px)`;
     });
   }
 
