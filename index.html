@@ -11,7 +11,7 @@
   <style>
     body {
       margin: 0;
-      background: #fffaf0;
+      background: #ffffff; /* 背景を真っ白に */
       font-family: sans-serif;
       overflow: hidden;
     }
@@ -71,9 +71,10 @@
   <div id="currentTime"></div>
   <div class="map">
     <div class="center-line" id="line"></div>
-    <div class="stop" id="depot" style="top:10%;">車庫</div>
-    <div class="stop" id="itsukaichi" style="top:40%;">五日市駅南口</div>
-    <div class="stop" id="koudai" style="top:85%;">広島工大</div>
+    <!-- 上から順に広島工大 → 五日市駅南口 → 車庫 -->
+    <div class="stop" id="koudai" style="top:10%;">広島工大</div>
+    <div class="stop" id="itsukaichi" style="top:55%;">五日市駅南口</div>
+    <div class="stop" id="depot" style="top:80%;">車庫</div>
   </div>
 
   <script>
@@ -132,9 +133,9 @@
       const line = document.getElementById("line");
       const lineHeight = line.clientHeight;
       const stops = {
-        "車庫": line.offsetTop + 0.1 * lineHeight,
-        "五日市駅南口": line.offsetTop + 0.4 * lineHeight,
-        "広島工大": line.offsetTop + 0.85 * lineHeight
+        "広島工大": line.offsetTop + 0.1 * lineHeight,
+        "五日市駅南口": line.offsetTop + 0.55 * lineHeight,
+        "車庫": line.offsetTop + 0.80 * lineHeight
       };
 
       busData.forEach((bus, idx) => {
