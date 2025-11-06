@@ -7,19 +7,22 @@
   <style>
     body {
       font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      margin: 0;
       background: #fafafa;
-      padding: 40px;
+      height: 100vh;
       display: flex;
       justify-content: center;
+      align-items: stretch;
     }
+
     .tracker {
       position: relative;
-      width: 500px;
+      width: 100%;
+      max-width: 800px;
       background: #fff;
-      border-radius: 16px;
+      border-radius: 0;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       overflow: hidden;
-      padding: 40px 0;
     }
 
     /* 現在時刻表示 */
@@ -37,23 +40,22 @@
       z-index: 10;
     }
 
-    /* 縦ライン（中央オレンジ） */
+    /* 中央ライン */
     .line {
       position: absolute;
       left: 50%;
       top: 0;
       transform: translateX(-50%);
-      width: 16px;
+      width: 20px;
       height: 100%;
       background: #f39c12;
-      border-radius: 8px;
+      border-radius: 10px;
     }
 
     /* 停留所 */
     .stop {
       position: relative;
       width: 100%;
-      height: 120px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -89,7 +91,6 @@
 
     .bus.up { left: calc(50% - 60px); background: #e67e22; }
     .bus.down { left: calc(50% + 20px); background: #f1c40f; color:#333; }
-
   </style>
 </head>
 <body>
@@ -105,36 +106,16 @@
   let stops = [];
   let buses = [];
 
-  function parseCSV(text){
-    return text.split(/\r?\n/).filter(l=>l.trim().length>0).map(l=>l.split(','));
-  }
-
+  function parseCSV(text){ return text.split(/\\r?\\n/).filter(l=>l.trim().length>0).map(l=>l.split(',')); }
   function parseTime(v){
     if(!v) return null;
     v = v.toString();
-    if(v.includes(':')){
-      const [h,m] = v.split(':').map(Number);
-      return h*60+m;
-    }
+    if(v.includes(':')){ const [h,m] = v.split(':').map(Number); return h*60+m; }
     const num = parseInt(v);
-    const h = Math.floor(num/100);
-    const m = num%100;
-    return h*60+m;
+    return Math.floor(num/100)*60 + (num%100);
   }
-
-  function nowMin(){
-    const d = new Date();
-    return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
-  }
-
-  function formatTime(){
-    const d = new Date();
-    const hh = String(d.getHours()).padStart(2,'0');
-    const mm = String(d.getMinutes()).padStart(2,'0');
-    const ss = String(d.getSeconds()).padStart(2,'0');
-    return `${hh}:${mm}:${ss}`;
-  }
-
+  function nowMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes()+d.getSeconds()/60; }
+  function formatTime(){ const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`; }
   function lerp(a,b,t){ return a+(b-a)*t; }
 
   async function load(){
@@ -145,7 +126,7 @@
     const stopNames = header.slice(3);
     buildStops(stopNames);
 
-    buses = rows.slice(1).map((r,i)=>{
+    buses = rows.slice(1).map((r)=>{
       const direction = r[1];
       const id = r[2];
       const times = r.slice(3).map(parseTime);
@@ -153,51 +134,53 @@
       el.className = `bus ${direction}`;
       el.textContent = id;
       tracker.appendChild(el);
-      return {direction, id, times, el};
+      return {direction,id,times,el};
     });
   }
 
   function buildStops(names){
-    names.forEach(name=>{
+    const baseSpacing = 120;  // 基本間隔
+    const longSpacing = baseSpacing * 3; // 五日市駅南口→広島工大の間隔
+
+    names.forEach((name,i)=>{
       const s = document.createElement('div');
       s.className = 'stop';
       s.innerHTML = `<div class="label">${name}</div>`;
       tracker.appendChild(s);
       stops.push(s);
     });
+
+    // 各停留所の相対位置を調整
     requestAnimationFrame(()=>{
-      stops.forEach(st=>{
-        const rect = st.getBoundingClientRect();
-        const parentRect = tracker.getBoundingClientRect();
-        st.y = rect.top - parentRect.top + rect.height/2;
+      let y = 80; // 最初の位置
+      stops.forEach((st,i)=>{
+        st.y = y;
+        const spacing = (i===1) ? longSpacing : baseSpacing; // 五日市駅南口の次だけ3倍
+        y += spacing;
       });
     });
   }
 
-  function mapIndex(i, dir){
-    return dir==='up' ? stops.length-1-i : i;
-  }
+  function mapIndex(i, dir){ return dir==='up' ? stops.length-1-i : i; }
 
   function update(){
     const n = nowMin();
-    clockEl.textContent = formatTime(); // 現在時刻を更新
+    clockEl.textContent = formatTime();
 
     buses.forEach(bus=>{
       const t = bus.times;
       let idx=-1;
-      for(let i=0;i<t.length-1;i++){
-        if(n>=t[i] && n<=t[i+1]){idx=i;break;}
-      }
+      for(let i=0;i<t.length-1;i++){ if(n>=t[i] && n<=t[i+1]){ idx=i; break; } }
       let y;
       if(idx===-1){
         y = n<t[0]?stops[mapIndex(0,bus.direction)].y:stops[mapIndex(stops.length-1,bus.direction)].y;
-      } else {
-        const f = (n-t[idx])/(t[idx+1]-t[idx]);
-        const y0 = stops[mapIndex(idx,bus.direction)].y;
-        const y1 = stops[mapIndex(idx+1,bus.direction)].y;
-        y = lerp(y0,y1,f);
+      }else{
+        const f=(n-t[idx])/(t[idx+1]-t[idx]);
+        const y0=stops[mapIndex(idx,bus.direction)].y;
+        const y1=stops[mapIndex(idx+1,bus.direction)].y;
+        y=lerp(y0,y1,f);
       }
-      bus.el.style.transform = `translateY(${y-12}px)`;
+      bus.el.style.transform=`translateY(${y-12}px)`;
     });
   }
 
