@@ -120,9 +120,15 @@
       return h * 60 + m;
     }
 
-    // 線形補完
+    // 線形補完（t1 < t2想定、逆順でもOKにする）
     function interpolate(pos1, pos2, t1, t2, now) {
       if (t1 === t2) return pos2;
+      if (t1 > t2) { // 時間が逆転していたら入れ替え
+        [t1, t2] = [t2, t1];
+        [pos1, pos2] = [pos2, pos1];
+      }
+      if (now <= t1) return pos1;
+      if (now >= t2) return pos2;
       return pos1 + ((pos2 - pos1) * (now - t1)) / (t2 - t1);
     }
 
@@ -150,14 +156,13 @@
         let posY = null;
 
         if (dir === "up") {
-          // 車庫 → 五日市駅 → 広島工大
           if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
             posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
           } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
             posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
           }
         } else if (dir === "down") {
-          // 広島工大 → 五日市駅 → 車庫（時刻が逆順）
+          // downは時刻が逆順（大きい→小さい）でも補間可能
           if (tStart && tMid && nowMinutes <= tStart && nowMinutes >= tMid) {
             posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
           } else if (tMid && tEnd && nowMinutes <= tMid && nowMinutes >= tEnd) {
