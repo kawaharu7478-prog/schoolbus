@@ -14,7 +14,6 @@
   .tracker {
     position: relative;
     width: 100%;
-    height: 100vh;
     background: #fff;
   }
   .clock {
@@ -66,12 +65,12 @@
     align-items: center;
     font-size: 12px;
     font-weight: bold;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
     transition: transform 0.5s linear;
     z-index: 5;
   }
-  .bus.up { left: calc(50% - 70px); background: #e67e22; }
-  .bus.down { left: calc(50% + 30px); background: #f1c40f; color: #333; }
+  .bus.up { left: calc(50% - 90px); background: #e67e22; }
+  .bus.down { left: calc(50% + 50px); background: #f1c40f; color: #333; }
 </style>
 </head>
 <body>
@@ -118,21 +117,23 @@ async function load(){
   const stopNames = rows[0].slice(3);
   buildStops(stopNames);
 
-  buses = rows.slice(1).map(r=>{
+  buses = rows.slice(1).map((r,idx)=>{
     const direction = r[1];
     const id = r[2];
     const times = r.slice(3).map(parseTime);
     const el = document.createElement('div');
     el.className = `bus ${direction}`;
     el.textContent = id;
+    // 同位置バスのズレ（上下オフセット）をつける
+    el.dataset.offset = (idx % 3) * 10 - 10; 
     tracker.appendChild(el);
     return {direction, id, times, el};
   });
 }
 
 function buildStops(names){
-  const baseSpacing = 150; // 車庫〜五日市駅南口
-  const longSpacing = baseSpacing * 3; // 五日市駅南口〜広島工大
+  const baseSpacing = 150;
+  const longSpacing = baseSpacing * 3;
   let y = 100;
   names.forEach((name,i)=>{
     const s = document.createElement('div');
@@ -160,10 +161,7 @@ function update(){
     const t = bus.times;
     let idx = -1;
     for(let i=0;i<t.length-1;i++){
-      if(n >= t[i] && n <= t[i+1]){
-        idx = i;
-        break;
-      }
+      if(n >= t[i] && n <= t[i+1]){ idx = i; break; }
     }
     let y;
     if(idx === -1){
@@ -175,7 +173,10 @@ function update(){
       const y1 = stops[mapIndex(idx+1,bus.direction)].y;
       y = lerp(y0, y1, f);
     }
-    bus.el.style.transform = `translateY(${y - 12}px)`;
+
+    // バスごとの微調整（上下方向オフセットを追加）
+    const offset = parseFloat(bus.el.dataset.offset);
+    bus.el.style.transform = `translateY(${y - 12 + offset}px)`;
   });
 }
 
