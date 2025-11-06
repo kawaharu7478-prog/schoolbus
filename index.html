@@ -63,23 +63,20 @@
 
   .bus {
     position: absolute;
-    width: 48px;
+    width: 50px;
     height: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     transition: top 1s linear;
   }
 
-  .bus.up {
-    left: calc(50% - 80px); /* 左側に配置 */
-  }
-
-  .bus.down {
-    left: calc(50% + 32px); /* 右側に配置 */
-  }
+  .bus.up { left: calc(50% - 80px); }
+  .bus.down { left: calc(50% + 30px); }
 
   .bus img {
     width: 100%;
-    height: 100%;
-    object-fit: contain;
+    height: auto;
   }
 </style>
 </head>
@@ -92,101 +89,117 @@
     <div id="stop3" class="stop">広島工大</div>
   </div>
 
-  <script>
-  const stopPositions = {
-    "車庫": 10,
-    "五日市駅南口": 35,
-    "広島工大": 85
-  };
+<script>
+const stopPositions = {
+  "車庫": 10,
+  "五日市駅南口": 35,
+  "広島工大": 85
+};
 
-  async function loadCSV() {
-    const response = await fetch("timetable.csv");
-    const text = await response.text();
-    const lines = text.trim().split("\n").map(l => l.split(","));
-    const header = lines[0];
-    const data = lines.slice(1).map(row => {
-      const obj = {};
-      header.forEach((h, i) => obj[h] = row[i]);
-      return obj;
-    });
-    return data;
-  }
+// 🔸 「7:15」→ 435 のように変換する関数
+function parseTime(str) {
+  if (!str || str.trim() === "") return NaN;
+  const parts = str.trim().split(":");
+  if (parts.length !== 2) return NaN;
+  const h = parseInt(parts[0]);
+  const m = parseInt(parts[1]);
+  if (isNaN(h) || isNaN(m)) return NaN;
+  return h * 60 + m;
+}
 
-  function getBusPosition(bus, nowMinutes) {
-    const stops = ["車庫", "五日市駅南口", "広島工大"];
-    const start = parseFloat(bus["車庫"]);
-    const end = parseFloat(bus["広島工大"]);
+async function loadCSV() {
+  const response = await fetch("timetable.csv");
+  const text = await response.text();
+  const lines = text.trim().split("\n").map(l => l.split(","));
+  const header = lines[0];
+  const data = lines.slice(1).map(row => {
+    const obj = {};
+    header.forEach((h, i) => obj[h] = row[i]);
+    return obj;
+  });
+  return data;
+}
 
-    // 始発前・終点後 → 非表示
-    if (nowMinutes < start || nowMinutes > end) return null;
+function getBusPosition(bus, nowMinutes) {
+  const stops = ["車庫", "五日市駅南口", "広島工大"];
+  const times = stops.map(s => parseTime(bus[s]));
 
-    for (let i = 0; i < stops.length - 1; i++) {
-      const t1 = parseFloat(bus[stops[i]]);
-      const t2 = parseFloat(bus[stops[i + 1]]);
-      if (nowMinutes >= t1 && nowMinutes <= t2) {
-        const ratio = (nowMinutes - t1) / (t2 - t1);
-        const pos1 = stopPositions[stops[i]];
-        const pos2 = stopPositions[stops[i + 1]];
-        return pos1 + (pos2 - pos1) * ratio;
-      }
+  // 有効な時間だけを取り出す
+  const valid = stops.map((s, i) => ({ stop: s, t: times[i] })).filter(v => !isNaN(v.t));
+  if (valid.length < 2) return null;
+
+  const start = valid[0].t;
+  const end = valid[valid.length - 1].t;
+
+  if (nowMinutes < start || nowMinutes > end) return null;
+
+  for (let i = 0; i < valid.length - 1; i++) {
+    const t1 = valid[i].t;
+    const t2 = valid[i + 1].t;
+    if (nowMinutes >= t1 && nowMinutes <= t2) {
+      const ratio = (nowMinutes - t1) / (t2 - t1);
+      const pos1 = stopPositions[valid[i].stop];
+      const pos2 = stopPositions[valid[i + 1].stop];
+      return pos1 + (pos2 - pos1) * ratio;
     }
-    return null;
   }
+  return null;
+}
 
-  function updateClock() {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    document.getElementById("clock").textContent = `${hh}:${mm}:${ss}`;
-    return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  }
+function updateClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  document.getElementById("clock").textContent = `${hh}:${mm}:${ss}`;
+  return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+}
 
-  async function main() {
-    const buses = await loadCSV();
-    const container = document.getElementById("bus-container");
+async function main() {
+  const buses = await loadCSV();
+  const container = document.getElementById("bus-container");
+
+  buses.forEach((bus, idx) => {
+    const el = document.createElement("div");
+    el.className = `bus ${bus.direction}`;
+    el.id = `bus${idx}`;
+    el.style.display = "none";
+
+    const img = document.createElement("img");
+    const type = String(bus.bustype).trim();
+    if (type === "1") {
+      img.src = "2995.png";
+    } else if (type === "2") {
+      img.src = "2694.png";
+    } else {
+      img.src = "default.png";
+    }
+
+    el.appendChild(img);
+    container.appendChild(el);
+  });
+
+  function update() {
+    const nowMinutes = updateClock();
 
     buses.forEach((bus, idx) => {
-      const el = document.createElement("div");
-      el.className = `bus ${bus.direction}`;
-      el.id = `bus${idx}`;
-      el.style.display = "none"; // 初期は非表示
+      const pos = getBusPosition(bus, nowMinutes);
+      const el = document.getElementById(`bus${idx}`);
 
-      // bustypeごとに画像を設定
-      const img = document.createElement("img");
-      if (bus.bustype === "1") {
-        img.src = "2995.png";
-      } else if (bus.bustype === "2") {
-        img.src = "2694.png";
+      if (pos === null) {
+        el.style.display = "none";
       } else {
-        img.src = "default.png"; // 万一のフォールバック
+        el.style.display = "flex";
+        el.style.top = `${pos}%`;
       }
-
-      el.appendChild(img);
-      container.appendChild(el);
     });
-
-    function update() {
-      const nowMinutes = updateClock();
-
-      buses.forEach((bus, idx) => {
-        const pos = getBusPosition(bus, nowMinutes);
-        const el = document.getElementById(`bus${idx}`);
-
-        if (pos === null) {
-          el.style.display = "none";
-        } else {
-          el.style.display = "block";
-          el.style.top = `${pos}%`;
-        }
-      });
-    }
-
-    update();
-    setInterval(update, 1000);
   }
 
-  main();
-  </script>
+  update();
+  setInterval(update, 1000);
+}
+
+main();
+</script>
 </body>
 </html>
