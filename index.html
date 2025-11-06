@@ -7,39 +7,92 @@
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>バス走行位置</title>
+  <title>バス走行位置表示</title>
   <style>
-    body { background:#fffaf0; margin:0; padding:0; font-family:sans-serif; }
-    #currentTime { position:fixed; top:10px; left:20px; font-size:20px; color:#333; }
-    .bus { position:absolute; width:40px; transition:top 1s linear; }
+    body {
+      margin: 0;
+      background: #fffaf0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+
+    #currentTime {
+      position: fixed;
+      top: 10px;
+      left: 20px;
+      font-size: 20px;
+      color: #333;
+      z-index: 10;
+    }
+
+    .map {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .center-line {
+      position: relative;
+      width: 4px;
+      height: 90vh;
+      background-color: orange;
+    }
+
+    .stop {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-weight: bold;
+      background: white;
+      padding: 3px 8px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .bus {
+      position: absolute;
+      width: 40px;
+      transition: top 1s linear;
+    }
+
+    .left {
+      left: calc(50% - 70px);
+    }
+
+    .right {
+      left: calc(50% + 30px);
+    }
   </style>
 </head>
 <body>
   <div id="currentTime"></div>
-  <div id="map">
-    <div id="stops">
-      <div>車庫</div>
-      <div>五日市駅南口</div>
-      <div>広島工大</div>
-    </div>
+  <div class="map">
+    <div class="center-line" id="line"></div>
+    <div class="stop" id="depot" style="top:10%;">車庫</div>
+    <div class="stop" id="itsukaichi" style="top:40%;">五日市駅南口</div>
+    <div class="stop" id="koudai" style="top:85%;">広島工大</div>
   </div>
 
   <script>
-    // 現在時刻の表示
+    // 現在時刻表示
     function updateClock() {
       const now = new Date();
       document.getElementById("currentTime").textContent = now.toLocaleTimeString();
     }
     setInterval(updateClock, 1000);
+    updateClock();
 
-    // 安全なCSVロード
+    // CSVを安全に読み込む
     async function loadCSV() {
-      const res = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
-      const text = await res.text();
-      return text;
+      const response = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
+      const text = await response.text();
+      return text.trim();
     }
 
-    // バスアイコン取得
+    // バス画像選択
     function getBusIcon(type) {
       const timestamp = Date.now();
       if (type === "1") return `2995.png?v=${timestamp}`;
@@ -47,14 +100,97 @@
       return "";
     }
 
-    // 実際の動作（例）
-    async function init() {
-      const csvText = await loadCSV();
-      console.log("CSV loaded:", csvText.slice(0,100));
-      // （ここに補完・描画ロジック）
+    // CSV→配列変換
+    function parseCSV(csv) {
+      const lines = csv.split("\n");
+      const header = lines[0].split(",");
+      const data = lines.slice(1).map(line => {
+        const values = line.split(",");
+        const obj = {};
+        header.forEach((h, i) => obj[h.trim()] = values[i] ? values[i].trim() : "");
+        return obj;
+      });
+      return data;
     }
 
-    init();
+    // 時刻文字列→分単位変換
+    function timeToMinutes(t) {
+      if (!t) return null;
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    // バス位置を線形補完
+    function interpolate(pos1, pos2, t1, t2, now) {
+      if (now <= t1) return pos1;
+      if (now >= t2) return pos2;
+      return pos1 + ((pos2 - pos1) * (now - t1)) / (t2 - t1);
+    }
+
+    // バス描画
+    function drawBus(busData, nowMinutes) {
+      const line = document.getElementById("line");
+      const lineHeight = line.clientHeight;
+      const stops = {
+        "車庫": line.offsetTop + 0.1 * lineHeight,
+        "五日市駅南口": line.offsetTop + 0.4 * lineHeight,
+        "広島工大": line.offsetTop + 0.85 * lineHeight
+      };
+
+      busData.forEach((bus, idx) => {
+        const startStop = bus.direction === "up" ? "車庫" : "広島工大";
+        const midStop = "五日市駅南口";
+        const endStop = bus.direction === "up" ? "広島工大" : "車庫";
+
+        const tStart = timeToMinutes(bus[startStop]);
+        const tMid = timeToMinutes(bus[midStop]);
+        const tEnd = timeToMinutes(bus[endStop]);
+
+        let posY = null;
+
+        if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
+          posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
+        } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
+          posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
+        }
+
+        const existing = document.getElementById(`bus-${idx}`);
+        if (!posY || nowMinutes < tStart || nowMinutes > tEnd) {
+          if (existing) existing.style.display = "none";
+          return;
+        }
+
+        let busEl = existing;
+        if (!busEl) {
+          busEl = document.createElement("img");
+          busEl.id = `bus-${idx}`;
+          busEl.src = getBusIcon(bus.bustype);
+          busEl.alt = "バス";
+          busEl.className = `bus ${bus.direction === "up" ? "left" : "right"}`;
+          document.body.appendChild(busEl);
+        }
+
+        busEl.style.display = "block";
+        busEl.style.top = `${posY}px`;
+      });
+    }
+
+    // メイン処理
+    async function main() {
+      const csvText = await loadCSV();
+      const busData = parseCSV(csvText);
+
+      function tick() {
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+        drawBus(busData, nowMinutes);
+      }
+
+      tick();
+      setInterval(tick, 1000);
+    }
+
+    main();
   </script>
 </body>
 </html>
