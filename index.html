@@ -73,15 +73,15 @@
     color: white;
     font-weight: bold;
     box-shadow: 0 0 4px rgba(0,0,0,0.3);
-    transition: top 1s linear; /* ← 移動を滑らかに見せる */
+    transition: top 1s linear;
   }
 
   .bus.up {
-    left: calc(50% - 60px); /* 左側を上りバスに */
+    left: calc(50% - 60px);
   }
 
   .bus.down {
-    left: calc(50% + 20px); /* 右側を下りバスに */
+    left: calc(50% + 20px);
   }
 </style>
 </head>
@@ -116,6 +116,12 @@
 
   function getBusPosition(bus, nowMinutes) {
     const stops = ["車庫", "五日市駅南口", "広島工大"];
+    const start = parseFloat(bus["車庫"]);
+    const end = parseFloat(bus["広島工大"]);
+
+    // 始発前・終点後 → 非表示
+    if (nowMinutes < start || nowMinutes > end) return null;
+
     for (let i = 0; i < stops.length - 1; i++) {
       const t1 = parseFloat(bus[stops[i]]);
       const t2 = parseFloat(bus[stops[i + 1]]);
@@ -126,9 +132,7 @@
         return pos1 + (pos2 - pos1) * ratio;
       }
     }
-    // 範囲外なら端に固定
-    if (nowMinutes < parseFloat(bus["車庫"])) return stopPositions["車庫"];
-    if (nowMinutes > parseFloat(bus["広島工大"])) return stopPositions["広島工大"];
+    return null;
   }
 
   function updateClock() {
@@ -144,12 +148,12 @@
     const buses = await loadCSV();
     const container = document.getElementById("bus-container");
 
-    // バスアイコン生成
     buses.forEach((bus, idx) => {
       const el = document.createElement("div");
       el.className = `bus ${bus.direction}`;
       el.id = `bus${idx}`;
       el.textContent = "🚌";
+      el.style.display = "none"; // 初期は非表示
       container.appendChild(el);
     });
 
@@ -159,7 +163,12 @@
       buses.forEach((bus, idx) => {
         const pos = getBusPosition(bus, nowMinutes);
         const el = document.getElementById(`bus${idx}`);
-        if (pos !== undefined) {
+
+        if (pos === null) {
+          // 始発前・終点後 → 非表示
+          el.style.display = "none";
+        } else {
+          el.style.display = "flex"; // 運行中のみ表示
           el.style.top = `${pos}%`;
         }
       });
