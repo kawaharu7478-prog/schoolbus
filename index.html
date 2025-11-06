@@ -1,192 +1,174 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>バス走行位置トラッカー</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バス走行位置表示</title>
 <style>
   body {
+    font-family: "Segoe UI", sans-serif;
+    background-color: #fff;
     margin: 0;
-    background: #fafafa;
-    font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    overflow-y: scroll;
+    overflow: hidden;
   }
-  .tracker {
-    position: relative;
-    width: 100%;
-    background: #fff;
-  }
-  .clock {
+
+  #clock {
     position: fixed;
     top: 10px;
     left: 10px;
-    background: rgba(255,255,255,0.9);
-    color: #f39c12;
-    padding: 6px 12px;
-    border-radius: 8px;
     font-weight: bold;
-    z-index: 100;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    color: #e67e22;
+    background: #fff3e0;
+    padding: 5px 10px;
+    border-radius: 6px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
   }
+
+  #bus-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
   .line {
     position: absolute;
+    width: 16px;
+    height: 90%;
+    background-color: #f39c12;
     left: 50%;
-    top: 0;
     transform: translateX(-50%);
-    width: 20px;
-    background: #f39c12;
-    border-radius: 10px;
-    z-index: 1;
+    border-radius: 8px;
   }
+
   .stop {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    text-align: center;
-    z-index: 10;
-  }
-  .stop .label {
-    display: inline-block;
-    background: #fff;
+    background: white;
     border: 3px solid #f39c12;
-    padding: 8px 16px;
     border-radius: 12px;
+    padding: 6px 14px;
     font-weight: bold;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   }
+
+  /* 停留所位置を画面内比率で配置 */
+  #stop1 { top: 10%; }
+  #stop2 { top: 35%; }
+  #stop3 { top: 85%; }
+
   .bus {
     position: absolute;
     width: 40px;
     height: 24px;
-    border-radius: 12px;
-    color: #fff;
+    border-radius: 8px;
+    background-color: orange;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 12px;
+    color: white;
     font-weight: bold;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    transition: transform 0.5s linear;
-    z-index: 5;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
   }
-  .bus.up { left: calc(50% - 90px); background: #e67e22; }
-  .bus.down { left: calc(50% + 50px); background: #f1c40f; color: #333; }
+
+  .bus.up {
+    left: calc(50% - 60px); /* 左側を上りバスに */
+  }
+
+  .bus.down {
+    left: calc(50% + 20px); /* 右側を下りバスに */
+  }
 </style>
 </head>
 <body>
-  <div class="clock" id="clock">--:--:--</div>
-  <div class="tracker" id="tracker">
-    <div class="line" id="line"></div>
+  <div id="clock">--:--:--</div>
+  <div id="bus-container">
+    <div class="line"></div>
+    <div id="stop1" class="stop">車庫</div>
+    <div id="stop2" class="stop">五日市駅南口</div>
+    <div id="stop3" class="stop">広島工大</div>
   </div>
 
-<script>
-const CSV_FILE = 'timetable.csv';
-const tracker = document.getElementById('tracker');
-const clockEl = document.getElementById('clock');
-let stops = [];
-let buses = [];
+  <script>
+  const stopPositions = {
+    "車庫": 10,
+    "五日市駅南口": 35,
+    "広島工大": 85
+  };
 
-function parseCSV(text){
-  return text.split(/\\r?\\n/).filter(l=>l.trim().length>0).map(l=>l.split(','));
-}
-function parseTime(v){
-  if(!v) return null;
-  if(v.includes(':')){
-    const [h,m] = v.split(':').map(Number);
-    return h*60+m;
+  async function loadCSV() {
+    const response = await fetch("timetable.csv");
+    const text = await response.text();
+    const lines = text.trim().split("\n").map(l => l.split(","));
+    const header = lines[0];
+    const data = lines.slice(1).map(row => {
+      const obj = {};
+      header.forEach((h, i) => obj[h] = row[i]);
+      return obj;
+    });
+    return data;
   }
-  const num = parseInt(v);
-  const h = Math.floor(num/100);
-  const m = num%100;
-  return h*60+m;
-}
-function nowMin(){
-  const d = new Date();
-  return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
-}
-function formatTime(){
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-}
-function lerp(a,b,t){return a+(b-a)*t;}
 
-async function load(){
-  const res = await fetch(CSV_FILE);
-  const txt = await res.text();
-  const rows = parseCSV(txt);
-  const stopNames = rows[0].slice(3);
-  buildStops(stopNames);
-
-  buses = rows.slice(1).map((r,idx)=>{
-    const direction = r[1];
-    const id = r[2];
-    const times = r.slice(3).map(parseTime);
-    const el = document.createElement('div');
-    el.className = `bus ${direction}`;
-    el.textContent = id;
-    // 同位置バスのズレ（上下オフセット）をつける
-    el.dataset.offset = (idx % 3) * 10 - 10; 
-    tracker.appendChild(el);
-    return {direction, id, times, el};
-  });
-}
-
-function buildStops(names){
-  const baseSpacing = 150;
-  const longSpacing = baseSpacing * 3;
-  let y = 100;
-  names.forEach((name,i)=>{
-    const s = document.createElement('div');
-    s.className = 'stop';
-    s.innerHTML = `<div class="label">${name}</div>`;
-    s.style.top = y + 'px';
-    tracker.appendChild(s);
-    stops.push({name, y});
-    if(i === 0) y += baseSpacing;
-    else if(i === 1) y += longSpacing;
-  });
-  tracker.style.height = (y + 300) + 'px';
-  document.getElementById('line').style.height = (y + 300) + 'px';
-}
-
-function mapIndex(i, dir){
-  return dir === 'up' ? stops.length - 1 - i : i;
-}
-
-function update(){
-  const n = nowMin();
-  clockEl.textContent = formatTime();
-
-  buses.forEach(bus=>{
-    const t = bus.times;
-    let idx = -1;
-    for(let i=0;i<t.length-1;i++){
-      if(n >= t[i] && n <= t[i+1]){ idx = i; break; }
+  function getBusPosition(bus, nowMinutes) {
+    const stops = ["車庫", "五日市駅南口", "広島工大"];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const t1 = parseInt(bus[stops[i]]);
+      const t2 = parseInt(bus[stops[i + 1]]);
+      if (nowMinutes >= t1 && nowMinutes <= t2) {
+        const ratio = (nowMinutes - t1) / (t2 - t1);
+        const pos1 = stopPositions[stops[i]];
+        const pos2 = stopPositions[stops[i + 1]];
+        return pos1 + (pos2 - pos1) * ratio;
+      }
     }
-    let y;
-    if(idx === -1){
-      y = n < t[0] ? stops[mapIndex(0,bus.direction)].y
-                   : stops[mapIndex(stops.length-1,bus.direction)].y;
-    } else {
-      const f = (n - t[idx]) / (t[idx+1] - t[idx]);
-      const y0 = stops[mapIndex(idx,bus.direction)].y;
-      const y1 = stops[mapIndex(idx+1,bus.direction)].y;
-      y = lerp(y0, y1, f);
+    if (nowMinutes < parseInt(bus[stops[0]])) return stopPositions[stops[0]];
+    if (nowMinutes > parseInt(bus[stops[2]])) return stopPositions[stops[2]];
+  }
+
+  function updateClock() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    document.getElementById("clock").textContent = `${hh}:${mm}:${ss}`;
+    return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+  }
+
+  async function main() {
+    const buses = await loadCSV();
+    const container = document.getElementById("bus-container");
+
+    buses.forEach((bus, idx) => {
+      const el = document.createElement("div");
+      el.className = `bus ${bus.direction}`;
+      el.id = `bus${idx}`;
+      el.textContent = "🚌";
+      container.appendChild(el);
+    });
+
+    function update() {
+      const nowMinutes = updateClock();
+
+      buses.forEach((bus, idx) => {
+        const pos = getBusPosition(bus, nowMinutes);
+        const el = document.getElementById(`bus${idx}`);
+        if (bus.direction === "up") {
+          el.style.top = `${pos}%`;
+        } else {
+          el.style.top = `${pos}%`;
+        }
+      });
     }
 
-    // バスごとの微調整（上下方向オフセットを追加）
-    const offset = parseFloat(bus.el.dataset.offset);
-    bus.el.style.transform = `translateY(${y - 12 + offset}px)`;
-  });
-}
-
-(async()=>{
-  await load();
-  setTimeout(()=>{
     update();
     setInterval(update, 1000);
-  },300);
-})();
-</script>
+  }
+
+  main();
+  </script>
 </body>
 </html>
