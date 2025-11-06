@@ -20,8 +20,6 @@
       width: 100%;
       max-width: 800px;
       background: #fff;
-      border-radius: 0;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       overflow: hidden;
     }
 
@@ -40,7 +38,7 @@
       z-index: 10;
     }
 
-    /* 中央ライン */
+    /* 縦ライン（中央オレンジ） */
     .line {
       position: absolute;
       left: 50%;
@@ -54,16 +52,15 @@
 
     /* 停留所 */
     .stop {
-      position: relative;
-      width: 100%;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       justify-content: center;
       align-items: center;
     }
 
     .stop .label {
-      position: relative;
-      z-index: 2;
       background: #fff;
       border: 3px solid #f39c12;
       color: #333;
@@ -106,16 +103,36 @@
   let stops = [];
   let buses = [];
 
-  function parseCSV(text){ return text.split(/\\r?\\n/).filter(l=>l.trim().length>0).map(l=>l.split(',')); }
+  function parseCSV(text){
+    return text.split(/\\r?\\n/).filter(l=>l.trim().length>0).map(l=>l.split(','));
+  }
+
   function parseTime(v){
     if(!v) return null;
     v = v.toString();
-    if(v.includes(':')){ const [h,m] = v.split(':').map(Number); return h*60+m; }
+    if(v.includes(':')){
+      const [h,m] = v.split(':').map(Number);
+      return h*60+m;
+    }
     const num = parseInt(v);
-    return Math.floor(num/100)*60 + (num%100);
+    const h = Math.floor(num/100);
+    const m = num%100;
+    return h*60+m;
   }
-  function nowMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes()+d.getSeconds()/60; }
-  function formatTime(){ const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`; }
+
+  function nowMin(){
+    const d = new Date();
+    return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
+  }
+
+  function formatTime(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
+  }
+
   function lerp(a,b,t){ return a+(b-a)*t; }
 
   async function load(){
@@ -134,34 +151,34 @@
       el.className = `bus ${direction}`;
       el.textContent = id;
       tracker.appendChild(el);
-      return {direction,id,times,el};
+      return {direction, id, times, el};
     });
   }
 
   function buildStops(names){
-    const baseSpacing = 120;  // 基本間隔
-    const longSpacing = baseSpacing * 3; // 五日市駅南口→広島工大の間隔
+    const baseSpacing = 150; // 車庫～五日市駅南口の間隔
+    const longSpacing = baseSpacing * 3; // 五日市駅南口～広島工大の間隔
+    let y = 100;
 
-    names.forEach((name,i)=>{
+    names.forEach((name, i)=>{
       const s = document.createElement('div');
       s.className = 'stop';
       s.innerHTML = `<div class="label">${name}</div>`;
+      s.style.top = y + 'px';
       tracker.appendChild(s);
-      stops.push(s);
+      stops.push({name, y});
+      // 間隔調整
+      if (i === 0) y += baseSpacing;
+      else if (i === 1) y += longSpacing;
     });
 
-    // 各停留所の相対位置を調整
-    requestAnimationFrame(()=>{
-      let y = 80; // 最初の位置
-      stops.forEach((st,i)=>{
-        st.y = y;
-        const spacing = (i===1) ? longSpacing : baseSpacing; // 五日市駅南口の次だけ3倍
-        y += spacing;
-      });
-    });
+    // tracker高さを全体に合わせる
+    tracker.style.height = (y + 150) + 'px';
   }
 
-  function mapIndex(i, dir){ return dir==='up' ? stops.length-1-i : i; }
+  function mapIndex(i, dir){
+    return dir === 'up' ? stops.length - 1 - i : i;
+  }
 
   function update(){
     const n = nowMin();
@@ -169,18 +186,24 @@
 
     buses.forEach(bus=>{
       const t = bus.times;
-      let idx=-1;
-      for(let i=0;i<t.length-1;i++){ if(n>=t[i] && n<=t[i+1]){ idx=i; break; } }
-      let y;
-      if(idx===-1){
-        y = n<t[0]?stops[mapIndex(0,bus.direction)].y:stops[mapIndex(stops.length-1,bus.direction)].y;
-      }else{
-        const f=(n-t[idx])/(t[idx+1]-t[idx]);
-        const y0=stops[mapIndex(idx,bus.direction)].y;
-        const y1=stops[mapIndex(idx+1,bus.direction)].y;
-        y=lerp(y0,y1,f);
+      let idx = -1;
+      for(let i=0;i<t.length-1;i++){
+        if(n >= t[i] && n <= t[i+1]){
+          idx = i;
+          break;
+        }
       }
-      bus.el.style.transform=`translateY(${y-12}px)`;
+      let y;
+      if(idx === -1){
+        y = n < t[0] ? stops[mapIndex(0,bus.direction)].y
+                     : stops[mapIndex(stops.length-1,bus.direction)].y;
+      } else {
+        const f = (n - t[idx]) / (t[idx+1] - t[idx]);
+        const y0 = stops[mapIndex(idx,bus.direction)].y;
+        const y1 = stops[mapIndex(idx+1,bus.direction)].y;
+        y = lerp(y0, y1, f);
+      }
+      bus.el.style.transform = `translateY(${y-12}px)`;
     });
   }
 
@@ -188,7 +211,7 @@
     await load();
     setTimeout(()=>{
       update();
-      setInterval(update,1000);
+      setInterval(update, 1000);
     },300);
   })();
   </script>
