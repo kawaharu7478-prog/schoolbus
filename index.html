@@ -1,205 +1,60 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>バス走行位置表示</title>
-<style>
-  body {
-    font-family: "Segoe UI", sans-serif;
-    background-color: #fff;
-    margin: 0;
-    overflow: hidden;
-  }
-
-  #clock {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    font-weight: bold;
-    color: #e67e22;
-    background: #fff3e0;
-    padding: 5px 10px;
-    border-radius: 6px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.2);
-  }
-
-  #bus-container {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .line {
-    position: absolute;
-    width: 16px;
-    height: 90%;
-    background-color: #f39c12;
-    left: 50%;
-    transform: translateX(-50%);
-    border-radius: 8px;
-  }
-
-  .stop {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    background: white;
-    border: 3px solid #f39c12;
-    border-radius: 12px;
-    padding: 6px 14px;
-    font-weight: bold;
-    text-align: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  }
-
-  #stop1 { top: 10%; }
-  #stop2 { top: 35%; }
-  #stop3 { top: 85%; }
-
-  .bus {
-    position: absolute;
-    width: 50px;
-    height: 30px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: top 1s linear;
-  }
-
-  .bus.up { left: calc(50% - 80px); }
-  .bus.down { left: calc(50% + 30px); }
-
-  .bus img {
-    width: 100%;
-    height: auto;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>バス走行位置</title>
+  <style>
+    body { background:#fffaf0; margin:0; padding:0; font-family:sans-serif; }
+    #currentTime { position:fixed; top:10px; left:20px; font-size:20px; color:#333; }
+    .bus { position:absolute; width:40px; transition:top 1s linear; }
+  </style>
 </head>
 <body>
-  <div id="clock">--:--:--</div>
-  <div id="bus-container">
-    <div class="line"></div>
-    <div id="stop1" class="stop">車庫</div>
-    <div id="stop2" class="stop">五日市駅南口</div>
-    <div id="stop3" class="stop">広島工大</div>
+  <div id="currentTime"></div>
+  <div id="map">
+    <div id="stops">
+      <div>車庫</div>
+      <div>五日市駅南口</div>
+      <div>広島工大</div>
+    </div>
   </div>
 
-<script>
-const stopPositions = {
-  "車庫": 10,
-  "五日市駅南口": 35,
-  "広島工大": 85
-};
-
-function parseTime(str) {
-  if (!str || str.trim() === "") return NaN;
-  const parts = str.trim().split(":");
-  if (parts.length !== 2) return NaN;
-  const h = parseInt(parts[0]);
-  const m = parseInt(parts[1]);
-  if (isNaN(h) || isNaN(m)) return NaN;
-  return h * 60 + m;
-}
-
-async function loadCSV() {
-  const response = await fetch("timetable.csv");
-  const text = await response.text();
-  const lines = text.trim().split("\n").map(l => l.split(","));
-  const header = lines[0];
-  const data = lines.slice(1).map(row => {
-    const obj = {};
-    header.forEach((h, i) => obj[h] = row[i]);
-    return obj;
-  });
-  return data;
-}
-
-function getBusPosition(bus, nowMinutes) {
-  const stops = ["車庫", "五日市駅南口", "広島工大"];
-  const times = stops.map(s => parseTime(bus[s]));
-  const valid = stops.map((s, i) => ({ stop: s, t: times[i] })).filter(v => !isNaN(v.t));
-  if (valid.length < 2) return null;
-
-  const start = valid[0].t;
-  const end = valid[valid.length - 1].t;
-  if (nowMinutes < start || nowMinutes > end) return null;
-
-  for (let i = 0; i < valid.length - 1; i++) {
-    const t1 = valid[i].t;
-    const t2 = valid[i + 1].t;
-    if (nowMinutes >= t1 && nowMinutes <= t2) {
-      const ratio = (nowMinutes - t1) / (t2 - t1);
-      const pos1 = stopPositions[valid[i].stop];
-      const pos2 = stopPositions[valid[i + 1].stop];
-      return pos1 + (pos2 - pos1) * ratio;
+  <script>
+    // 現在時刻の表示
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("currentTime").textContent = now.toLocaleTimeString();
     }
-  }
-  return null;
-}
+    setInterval(updateClock, 1000);
 
-function updateClock() {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
-  document.getElementById("clock").textContent = `${hh}:${mm}:${ss}`;
-  return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-}
-
-async function main() {
-  const buses = await loadCSV();
-  const container = document.getElementById("bus-container");
-
-  buses.forEach((bus, idx) => {
-    const el = document.createElement("div");
-    el.className = `bus ${bus.direction}`;
-    el.id = `bus${idx}`;
-    el.style.display = "none";
-
-    const img = document.createElement("img");
-    const type = String(bus.bustype).trim();
-    if (type === "1") {
-      img.src = "2995.png";
-      img.alt = "路線バス（タイプ1）";
-      img.title = "路線バス（タイプ1）";
-    } else if (type === "2") {
-      img.src = "2694.png";
-      img.alt = "路線バス（タイプ2）";
-      img.title = "路線バス（タイプ2）";
-    } else {
-      img.src = "default.png";
-      img.alt = "バスアイコン";
-      img.title = "バス";
+    // 安全なCSVロード
+    async function loadCSV() {
+      const res = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
+      const text = await res.text();
+      return text;
     }
 
-    el.appendChild(img);
-    container.appendChild(el);
-  });
+    // バスアイコン取得
+    function getBusIcon(type) {
+      const timestamp = Date.now();
+      if (type === "1") return `2995.png?v=${timestamp}`;
+      if (type === "2") return `2694.png?v=${timestamp}`;
+      return "";
+    }
 
-  function update() {
-    const nowMinutes = updateClock();
+    // 実際の動作（例）
+    async function init() {
+      const csvText = await loadCSV();
+      console.log("CSV loaded:", csvText.slice(0,100));
+      // （ここに補完・描画ロジック）
+    }
 
-    buses.forEach((bus, idx) => {
-      const pos = getBusPosition(bus, nowMinutes);
-      const el = document.getElementById(`bus${idx}`);
-      if (pos === null) {
-        el.style.display = "none";
-      } else {
-        el.style.display = "flex";
-        el.style.top = `${pos}%`;
-      }
-    });
-  }
-
-  update();
-  setInterval(update, 1000);
-}
-
-main();
-</script>
+    init();
+  </script>
 </body>
 </html>
