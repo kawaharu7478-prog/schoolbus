@@ -122,8 +122,7 @@
 
     // 線形補完
     function interpolate(pos1, pos2, t1, t2, now) {
-      if (now <= t1) return pos1;
-      if (now >= t2) return pos2;
+      if (t1 === t2) return pos2;
       return pos1 + ((pos2 - pos1) * (now - t1)) / (t2 - t1);
     }
 
@@ -150,7 +149,6 @@
 
         let posY = null;
 
-        // --- 進行方向ごとの補間 ---
         if (dir === "up") {
           // 車庫 → 五日市駅 → 広島工大
           if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
@@ -159,16 +157,26 @@
             posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
           }
         } else if (dir === "down") {
-          // 広島工大 → 五日市駅 → 車庫
-          if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
+          // 広島工大 → 五日市駅 → 車庫（時刻が逆順）
+          if (tStart && tMid && nowMinutes <= tStart && nowMinutes >= tMid) {
             posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
-          } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
+          } else if (tMid && tEnd && nowMinutes <= tMid && nowMinutes >= tEnd) {
             posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
           }
         }
 
         const existing = document.getElementById(`bus-${idx}`);
-        if (!posY || nowMinutes < tStart || nowMinutes > tEnd) {
+        if (!posY) {
+          if (existing) existing.style.display = "none";
+          return;
+        }
+
+        // 出発前・終点後は非表示
+        if (dir === "up" && (nowMinutes < tStart || nowMinutes > tEnd)) {
+          if (existing) existing.style.display = "none";
+          return;
+        }
+        if (dir === "down" && (nowMinutes > tStart || nowMinutes < tEnd)) {
           if (existing) existing.style.display = "none";
           return;
         }
