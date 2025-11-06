@@ -56,7 +56,7 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   }
 
-  /* 停留所位置を画面内比率で配置 */
+  /* 停留所位置（五日市～広島工大間を広く） */
   #stop1 { top: 10%; }
   #stop2 { top: 35%; }
   #stop3 { top: 85%; }
@@ -73,6 +73,7 @@
     color: white;
     font-weight: bold;
     box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    transition: top 1s linear; /* ← 移動を滑らかに見せる */
   }
 
   .bus.up {
@@ -116,8 +117,8 @@
   function getBusPosition(bus, nowMinutes) {
     const stops = ["車庫", "五日市駅南口", "広島工大"];
     for (let i = 0; i < stops.length - 1; i++) {
-      const t1 = parseInt(bus[stops[i]]);
-      const t2 = parseInt(bus[stops[i + 1]]);
+      const t1 = parseFloat(bus[stops[i]]);
+      const t2 = parseFloat(bus[stops[i + 1]]);
       if (nowMinutes >= t1 && nowMinutes <= t2) {
         const ratio = (nowMinutes - t1) / (t2 - t1);
         const pos1 = stopPositions[stops[i]];
@@ -125,8 +126,9 @@
         return pos1 + (pos2 - pos1) * ratio;
       }
     }
-    if (nowMinutes < parseInt(bus[stops[0]])) return stopPositions[stops[0]];
-    if (nowMinutes > parseInt(bus[stops[2]])) return stopPositions[stops[2]];
+    // 範囲外なら端に固定
+    if (nowMinutes < parseFloat(bus["車庫"])) return stopPositions["車庫"];
+    if (nowMinutes > parseFloat(bus["広島工大"])) return stopPositions["広島工大"];
   }
 
   function updateClock() {
@@ -142,6 +144,7 @@
     const buses = await loadCSV();
     const container = document.getElementById("bus-container");
 
+    // バスアイコン生成
     buses.forEach((bus, idx) => {
       const el = document.createElement("div");
       el.className = `bus ${bus.direction}`;
@@ -156,9 +159,7 @@
       buses.forEach((bus, idx) => {
         const pos = getBusPosition(bus, nowMinutes);
         const el = document.getElementById(`bus${idx}`);
-        if (bus.direction === "up") {
-          el.style.top = `${pos}%`;
-        } else {
+        if (pos !== undefined) {
           el.style.top = `${pos}%`;
         }
       });
