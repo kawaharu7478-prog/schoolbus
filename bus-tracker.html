@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>バス走行位置トラッカー</title>
+  <style>
+    :root{--stop-gap:120px;--left-x:100px;--right-x:420px}
+    body{font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; padding:24px}
+    h1{font-size:1.2rem;margin-bottom:12px}
+    .tracker{position:relative; width:600px; border:1px solid #ddd; padding:16px; background:#fafafa}
+    .stops{position:relative; padding:20px 60px;}
+    .stop{height:var(--stop-gap); display:flex; align-items:center}
+    .stop .name{width:200px; text-align:center; font-weight:600}
+    /* vertical center line */
+    .rail{position:absolute; left:260px; top:20px; bottom:20px; width:2px; background:#eee}
+    /* markers */
+    .marker{position:absolute; left:250px; width:20px; height:20px; border-radius:50%; transform:translateX(-50%); background:#ccc}
+
+    /* bus icons */
+    .bus{position:absolute; width:36px; height:20px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:12px; color:#fff; padding:2px 6px}
+    .bus .id{font-weight:700}
+
+    /* helper: left/right lanes */
+    .lane-left{position:absolute; left:var(--left-x); width:40px}
+    .lane-right{position:absolute; left:var(--right-x); width:40px}
+
+    /* legend */
+    .legend{margin-top:12px}
+    .note{font-size:0.9rem;color:#666}
+  </style>
+</head>
+<body>
+  <h1>バス走行位置トラッカー（CSVから読み込み）</h1>
+  <div class="tracker" id="tracker">
+    <div class="stops" id="stopsArea">
+      <div class="rail"></div>
+      <!-- stop elements will be injected here -->
+    </div>
+    <!-- lanes (for absolute positioning) -->
+    <div class="lane-left" id="laneLeft"></div>
+    <div class="lane-right" id="laneRight"></div>
+  </div>
+  <div class="legend">
+    <div class="note">CSVファイル: <code>timetable.csv</code> を同じフォルダに置いてください。ブラウザで開くか、GitHub Pagesでホスティング可能です。</div>
+  </div>
+
+  <script>
+  // --- 設定 ---
+  const CSV_FILE = 'timetable.csv'; // 同じフォルダに置く
+  const STOP_ORDER = [];
+
+  // ヘッダはCSVに含まれているので、STOP_ORDERは後で上書き
+
+  // --- CSVパーサ ---
+  function parseCSV(text){
+    const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+    const rows = lines.map(l => {
+      // simple CSV split by comma (no quoting support needed for this use-case)
+      return l.split(',').map(s=>s.trim());
+    });
+    return rows;
+  }
+
+  function parseTimeToMinutes(v){
+    // Accept formats: "HH:MM", numeric HHMM (e.g. 600 -> 6:00), or minutes since midnight
+    if(v==null || v==='') return null;
+    if(typeof v === 'number') v = String(v);
+    if(v.includes(':')){
+      const [hh,mm]=v.split(':').map(x=>parseInt(x,10));
+      if(isNaN(hh)||isNaN(mm)) return null;
+      return hh*60+mm;
+    }
+    const num = parseInt(v,10);
+    if(isNaN(num)) return null;
+    // if looks like HHMM (>=100 and <=2359)
+    if(num>=0 && num<=2359){
+      // treat as HHMM if last two digits < 60
+      const hh = Math.floor(num/100);
+      const mm = num%100;
+      if(mm<60) return hh*60+mm;
+    }
+    // fallback: treat as minutes since midnight
+    return num;
+  }
+
+  // 現在時刻を分単位で取得
+  function nowMinutes(){
+    const d = new Date();
+    return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60; // fraction minutes
+  }
+
+  // 線形補間
+  function lerp(a,b,t){ return a + (b-a)*t; }
+
+  // --- DOM構築 ---
+  const stopsArea = document.getElementById('stopsArea');
+  const laneLeft = document.getElementById('laneLeft');
+  const laneRight = document.getElementById('laneRight');
+  const tracker = document.getElementById('tracker');
+
+  let stops = []; // {name, el, y}
+  let buses = []; // {direction, times:[min,...], el, id}
+
+  function buildStops(names){
+    stopsArea.innerHTML = '<div class="rail"></div>';
+    stops = [];
+    names.forEach((name, i)=>{
+      const stopEl = document.createElement('div');
+      stopEl.className = 'stop';
+      stopEl.innerHTML = `<div class="name">${name}</div>`;
+      stopsArea.appendChild(stopEl);
+      stops.push({name, el: stopEl});
+    });
+    // after layout compute y positions
+    requestAnimationFrame(()=>{
+      stops.forEach(s=>{
+        const r = s.el.getBoundingClientRect();
+        const containerRect = stopsArea.getBoundingClientRect();
+        // center Y of the stop relative to the stopsArea top
+        s.y = (r.top - containerRect.top) + r.height/2;
+      });
+    });
+  }
+
+  function createBusElement(color){
+    const b = document.createElement('div');
+    b.className = 'bus';
+    b.style.background = color || '#007bff';
+    b.style.left = '0px';
+    b.innerHTML = '<span class="id"></span>';
+    tracker.appendChild(b);
+    return b;
+  }
+
+  // CSV読み込み -> データ構造化
+  async function loadCSV(){
+    try{
+      const resp = await fetch(CSV_FILE, {cache: 'no-store'});
+      if(!resp.ok) throw new Error('CSV読み込み失敗: '+resp.status);
+      const txt = await resp.text();
+      const rows = parseCSV(txt);
+      if(rows.length < 2) throw new Error('CSVにデータがありません');
+      const header = rows[0];
+      // header example: bustype,direction,bus_id,車庫,五日市駅南口,広島工大
+      const stopNames = header.slice(3);
+      buildStops(stopNames);
+
+      buses = rows.slice(1).map((row,idx)=>{
+        const direction = row[1];
+        const bus_id = row[2];
+        const timeCells = row.slice(3);
+        const times = timeCells.map(cell => parseTimeToMinutes(cell));
+        const el = createBusElement(pickColor(idx));
+        el.querySelector('.id').textContent = bus_id;
+        return {direction, bus_id, times, el};
+      });
+
+    }catch(e){
+      stopsArea.innerHTML = '<div style="color:red">CSVの読み込みに失敗しました: '+e.message+'</div>';
+      console.error(e);
+    }
+  }
+
+  function pickColor(i){
+    const palette = ['#0b84ff','#f25c54','#f0a500','#6bd76b','#9b5de5','#ff6b6b'];
+    return palette[i % palette.length];
+  }
+
+  // 更新ループ: 1秒ごとに現在時刻に合わせて位置を更新
+  function updatePositions(){
+    const nowMin = nowMinutes();
+    buses.forEach(bus=>{
+      const times = bus.times;
+      // find segment index k so that times[k] <= now < times[k+1]
+      let k = -1;
+      for(let i=0;i<times.length-1;i++){
+        if(times[i] == null || times[i+1]==null) continue;
+        if(nowMin >= times[i] && nowMin <= times[i+1]){ k = i; break; }
+      }
+
+      let x = 0, y = 0;
+      const leftX = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--left-x')) || 100;
+      const rightX = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--right-x')) || 420;
+
+      if(k === -1){
+        // out of range: before first or after last
+        if(times[0] != null && nowMin < times[0]){
+          // before first stop -> place at first stop
+          const idx = 0;
+          const mappedIdx = mapIndexForDirection(idx, bus.direction);
+          x = bus.direction==='up' ? leftX : rightX;
+          y = stops[mappedIdx].y;
+        }else{
+          // after last stop
+          const idx = stops.length-1;
+          const mappedIdx = mapIndexForDirection(idx, bus.direction);
+          x = bus.direction==='up' ? leftX : rightX;
+          y = stops[mappedIdx].y;
+        }
+      } else {
+        const t0 = times[k];
+        const t1 = times[k+1];
+        const frac = (nowMin - t0) / (t1 - t0);
+        const idx0 = mapIndexForDirection(k, bus.direction);
+        const idx1 = mapIndexForDirection(k+1, bus.direction);
+        const y0 = stops[idx0].y;
+        const y1 = stops[idx1].y;
+        y = lerp(y0, y1, frac);
+        x = bus.direction==='up' ? leftX : rightX;
+      }
+
+      // position the element (convert stopsArea-relative to tracker coordinates)
+      const containerRect = stopsArea.getBoundingClientRect();
+      const trackerRect = tracker.getBoundingClientRect();
+      const topOffset = trackerRect.top - containerRect.top;
+      bus.el.style.transform = `translate(${x}px, ${y + topOffset - 10}px)`; // -10 to center the 20px height
+    });
+  }
+
+  function mapIndexForDirection(idx, direction){
+    // stops[] is ordered top -> bottom as in header order.
+    // The user requested: if direction is 'up' the bus moves on the left side "上方向に".
+    // We'll map the header order to visual positions so that 'up' buses travel bottom->top.
+    if(direction === 'up'){
+      return stops.length - 1 - idx;
+    }
+    return idx;
+  }
+
+  // start everything
+  (async function(){
+    await loadCSV();
+    // first update after a short delay to ensure layout computed
+    setTimeout(()=>{
+      updatePositions();
+      setInterval(updatePositions, 1000);
+    }, 200);
+  })();
+
+  </script>
+</body>
+</html>
