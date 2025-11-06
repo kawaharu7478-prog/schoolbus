@@ -120,16 +120,16 @@
       return h * 60 + m;
     }
 
-    // 線形補完（t1 < t2想定、逆順でもOKにする）
+    // 線形補完（時刻の昇順・降順どちらでも動作）
     function interpolate(pos1, pos2, t1, t2, now) {
+      if (t1 === null || t2 === null) return null;
       if (t1 === t2) return pos2;
-      if (t1 > t2) { // 時間が逆転していたら入れ替え
-        [t1, t2] = [t2, t1];
-        [pos1, pos2] = [pos2, pos1];
-      }
-      if (now <= t1) return pos1;
-      if (now >= t2) return pos2;
-      return pos1 + ((pos2 - pos1) * (now - t1)) / (t2 - t1);
+      // 昇順 or 降順どちらでも対応
+      const minT = Math.min(t1, t2);
+      const maxT = Math.max(t1, t2);
+      if (now < minT || now > maxT) return null;
+      const ratio = (now - t1) / (t2 - t1);
+      return pos1 + (pos2 - pos1) * ratio;
     }
 
     // バス描画
@@ -155,19 +155,11 @@
 
         let posY = null;
 
-        if (dir === "up") {
-          if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
-            posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
-          } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
-            posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
-          }
-        } else if (dir === "down") {
-          // downは時刻が逆順（大きい→小さい）でも補間可能
-          if (tStart && tMid && nowMinutes <= tStart && nowMinutes >= tMid) {
-            posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
-          } else if (tMid && tEnd && nowMinutes <= tMid && nowMinutes >= tEnd) {
-            posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
-          }
+        // ====== 修正版ロジック ======
+        if (tStart && tMid && nowMinutes >= Math.min(tStart, tMid) && nowMinutes <= Math.max(tStart, tMid)) {
+          posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
+        } else if (tMid && tEnd && nowMinutes >= Math.min(tMid, tEnd) && nowMinutes <= Math.max(tMid, tEnd)) {
+          posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
         }
 
         const existing = document.getElementById(`bus-${idx}`);
@@ -177,11 +169,9 @@
         }
 
         // 出発前・終点後は非表示
-        if (dir === "up" && (nowMinutes < tStart || nowMinutes > tEnd)) {
-          if (existing) existing.style.display = "none";
-          return;
-        }
-        if (dir === "down" && (nowMinutes > tStart || nowMinutes < tEnd)) {
+        const minT = Math.min(tStart || Infinity, tEnd || -Infinity);
+        const maxT = Math.max(tStart || -Infinity, tEnd || Infinity);
+        if (nowMinutes < minT || nowMinutes > maxT) {
           if (existing) existing.style.display = "none";
           return;
         }
