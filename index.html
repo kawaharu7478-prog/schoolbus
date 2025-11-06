@@ -104,13 +104,12 @@
     function parseCSV(csv) {
       const lines = csv.split("\n");
       const header = lines[0].split(",");
-      const data = lines.slice(1).map(line => {
+      return lines.slice(1).map(line => {
         const values = line.split(",");
         const obj = {};
         header.forEach((h, i) => obj[h.trim()] = values[i] ? values[i].trim() : "");
         return obj;
       });
-      return data;
     }
 
     // "7:15" → 分単位
@@ -123,8 +122,6 @@
     // 線形補完（時刻の昇順・降順どちらでも動作）
     function interpolate(pos1, pos2, t1, t2, now) {
       if (t1 === null || t2 === null) return null;
-      if (t1 === t2) return pos2;
-      // 昇順 or 降順どちらでも対応
       const minT = Math.min(t1, t2);
       const maxT = Math.max(t1, t2);
       if (now < minT || now > maxT) return null;
@@ -132,7 +129,6 @@
       return pos1 + (pos2 - pos1) * ratio;
     }
 
-    // バス描画
     function drawBus(busData, nowMinutes) {
       const line = document.getElementById("line");
       const lineHeight = line.clientHeight;
@@ -149,29 +145,26 @@
         const midStop = "五日市駅南口";
         const endStop = dir === "up" ? "広島工大" : "車庫";
 
-        const tStart = timeToMinutes(bus[startStop]);
-        const tMid = timeToMinutes(bus[midStop]);
-        const tEnd = timeToMinutes(bus[endStop]);
+        const times = [
+          { stop: startStop, time: timeToMinutes(bus[startStop]) },
+          { stop: midStop, time: timeToMinutes(bus[midStop]) },
+          { stop: endStop, time: timeToMinutes(bus[endStop]) }
+        ].filter(x => x.time !== null);
+
+        if (times.length < 2) return;
 
         let posY = null;
 
-        // ====== 修正版ロジック ======
-        if (tStart && tMid && nowMinutes >= Math.min(tStart, tMid) && nowMinutes <= Math.max(tStart, tMid)) {
-          posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
-        } else if (tMid && tEnd && nowMinutes >= Math.min(tMid, tEnd) && nowMinutes <= Math.max(tMid, tEnd)) {
-          posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
+        // 区間ごとに現在時刻が含まれていれば補間
+        for (let i = 0; i < times.length - 1; i++) {
+          const t1 = times[i], t2 = times[i + 1];
+          posY = interpolate(stops[t1.stop], stops[t2.stop], t1.time, t2.time, nowMinutes);
+          if (posY !== null) break;
         }
 
         const existing = document.getElementById(`bus-${idx}`);
-        if (!posY) {
-          if (existing) existing.style.display = "none";
-          return;
-        }
 
-        // 出発前・終点後は非表示
-        const minT = Math.min(tStart || Infinity, tEnd || -Infinity);
-        const maxT = Math.max(tStart || -Infinity, tEnd || Infinity);
-        if (nowMinutes < minT || nowMinutes > maxT) {
+        if (!posY) {
           if (existing) existing.style.display = "none";
           return;
         }
@@ -191,7 +184,6 @@
       });
     }
 
-    // メインループ
     async function main() {
       const csvText = await loadCSV();
       const busData = parseCSV(csvText);
