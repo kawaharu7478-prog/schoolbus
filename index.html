@@ -56,7 +56,6 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   }
 
-  /* 停留所位置（五日市～広島工大間を広く） */
   #stop1 { top: 10%; }
   #stop2 { top: 35%; }
   #stop3 { top: 85%; }
@@ -96,7 +95,6 @@ const stopPositions = {
   "広島工大": 85
 };
 
-// 🔸 「7:15」→ 435 のように変換する関数
 function parseTime(str) {
   if (!str || str.trim() === "") return NaN;
   const parts = str.trim().split(":");
@@ -123,14 +121,11 @@ async function loadCSV() {
 function getBusPosition(bus, nowMinutes) {
   const stops = ["車庫", "五日市駅南口", "広島工大"];
   const times = stops.map(s => parseTime(bus[s]));
-
-  // 有効な時間だけを取り出す
   const valid = stops.map((s, i) => ({ stop: s, t: times[i] })).filter(v => !isNaN(v.t));
   if (valid.length < 2) return null;
 
   const start = valid[0].t;
   const end = valid[valid.length - 1].t;
-
   if (nowMinutes < start || nowMinutes > end) return null;
 
   for (let i = 0; i < valid.length - 1; i++) {
@@ -169,10 +164,16 @@ async function main() {
     const type = String(bus.bustype).trim();
     if (type === "1") {
       img.src = "2995.png";
+      img.alt = "路線バス（タイプ1）";
+      img.title = "路線バス（タイプ1）";
     } else if (type === "2") {
       img.src = "2694.png";
+      img.alt = "路線バス（タイプ2）";
+      img.title = "路線バス（タイプ2）";
     } else {
       img.src = "default.png";
+      img.alt = "バスアイコン";
+      img.title = "バス";
     }
 
     el.appendChild(img);
@@ -185,7 +186,6 @@ async function main() {
     buses.forEach((bus, idx) => {
       const pos = getBusPosition(bus, nowMinutes);
       const el = document.getElementById(`bus${idx}`);
-
       if (pos === null) {
         el.style.display = "none";
       } else {
