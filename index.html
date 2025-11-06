@@ -11,7 +11,7 @@
   <style>
     body {
       margin: 0;
-      background: #ffffff; /* 背景を真っ白に */
+      background: #ffffff;
       font-family: sans-serif;
       overflow: hidden;
     }
@@ -71,7 +71,6 @@
   <div id="currentTime"></div>
   <div class="map">
     <div class="center-line" id="line"></div>
-    <!-- 上から順に広島工大 → 五日市駅南口 → 車庫 -->
     <div class="stop" id="koudai" style="top:10%;">広島工大</div>
     <div class="stop" id="itsukaichi" style="top:55%;">五日市駅南口</div>
     <div class="stop" id="depot" style="top:80%;">車庫</div>
@@ -86,14 +85,14 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // CSVを安全に読み込む
+    // CSV読み込み
     async function loadCSV() {
       const response = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
       const text = await response.text();
       return text.trim();
     }
 
-    // バス画像選択
+    // バス画像切替
     function getBusIcon(type) {
       const timestamp = Date.now();
       if (type === "1") return `2995.png?v=${timestamp}`;
@@ -101,7 +100,7 @@
       return "";
     }
 
-    // CSV→配列変換
+    // CSVパース
     function parseCSV(csv) {
       const lines = csv.split("\n");
       const header = lines[0].split(",");
@@ -114,14 +113,14 @@
       return data;
     }
 
-    // 時刻文字列→分単位変換
+    // "7:15" → 分単位
     function timeToMinutes(t) {
       if (!t) return null;
       const [h, m] = t.split(":").map(Number);
       return h * 60 + m;
     }
 
-    // バス位置を線形補完
+    // 線形補完
     function interpolate(pos1, pos2, t1, t2, now) {
       if (now <= t1) return pos1;
       if (now >= t2) return pos2;
@@ -139,9 +138,11 @@
       };
 
       busData.forEach((bus, idx) => {
-        const startStop = bus.direction === "up" ? "車庫" : "広島工大";
+        const bustype = bus.bustype;
+        const dir = bus.direction;
+        const startStop = dir === "up" ? "車庫" : "広島工大";
         const midStop = "五日市駅南口";
-        const endStop = bus.direction === "up" ? "広島工大" : "車庫";
+        const endStop = dir === "up" ? "広島工大" : "車庫";
 
         const tStart = timeToMinutes(bus[startStop]);
         const tMid = timeToMinutes(bus[midStop]);
@@ -149,10 +150,21 @@
 
         let posY = null;
 
-        if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
-          posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
-        } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
-          posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
+        // --- 進行方向ごとの補間 ---
+        if (dir === "up") {
+          // 車庫 → 五日市駅 → 広島工大
+          if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
+            posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
+          } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
+            posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
+          }
+        } else if (dir === "down") {
+          // 広島工大 → 五日市駅 → 車庫
+          if (tStart && tMid && nowMinutes >= tStart && nowMinutes <= tMid) {
+            posY = interpolate(stops[startStop], stops[midStop], tStart, tMid, nowMinutes);
+          } else if (tMid && tEnd && nowMinutes >= tMid && nowMinutes <= tEnd) {
+            posY = interpolate(stops[midStop], stops[endStop], tMid, tEnd, nowMinutes);
+          }
         }
 
         const existing = document.getElementById(`bus-${idx}`);
@@ -165,9 +177,9 @@
         if (!busEl) {
           busEl = document.createElement("img");
           busEl.id = `bus-${idx}`;
-          busEl.src = getBusIcon(bus.bustype);
+          busEl.src = getBusIcon(bustype);
           busEl.alt = "バス";
-          busEl.className = `bus ${bus.direction === "up" ? "left" : "right"}`;
+          busEl.className = `bus ${dir === "up" ? "left" : "right"}`;
           document.body.appendChild(busEl);
         }
 
@@ -176,7 +188,7 @@
       });
     }
 
-    // メイン処理
+    // メインループ
     async function main() {
       const csvText = await loadCSV();
       const busData = parseCSV(csvText);
