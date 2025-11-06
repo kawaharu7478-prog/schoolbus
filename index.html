@@ -22,6 +22,21 @@
       padding: 40px 0;
     }
 
+    /* 現在時刻表示 */
+    .clock {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: #f39c12;
+      background: rgba(255,255,255,0.8);
+      padding: 6px 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+
     /* 縦ライン（中央オレンジ） */
     .line {
       position: absolute;
@@ -79,12 +94,14 @@
 </head>
 <body>
   <div class="tracker" id="tracker">
+    <div class="clock" id="clock">--:--:--</div>
     <div class="line"></div>
   </div>
 
   <script>
   const CSV_FILE = 'timetable.csv';
   const tracker = document.getElementById('tracker');
+  const clockEl = document.getElementById('clock');
   let stops = [];
   let buses = [];
 
@@ -108,6 +125,14 @@
   function nowMin(){
     const d = new Date();
     return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60;
+  }
+
+  function formatTime(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
   }
 
   function lerp(a,b,t){ return a+(b-a)*t; }
@@ -155,6 +180,8 @@
 
   function update(){
     const n = nowMin();
+    clockEl.textContent = formatTime(); // 現在時刻を更新
+
     buses.forEach(bus=>{
       const t = bus.times;
       let idx=-1;
