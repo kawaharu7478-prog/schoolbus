@@ -66,7 +66,7 @@
     }
 
     .right {
-      left: calc(50% + 90px);  /* 以前より30px離す */
+      left: calc(50% + 130px);  /* 以前より30px離す */
     }
   </style>
 </head>
@@ -74,9 +74,9 @@
   <div id="currentTime"></div>
   <div class="map">
     <div class="center-line" id="line"></div>
-    <div class="stop" id="koudai" style="top:10%;">広島工大</div>
-    <div class="stop" id="itsukaichi" style="top:60%;">五日市駅南口</div>
-    <div class="stop" id="depot" style="top:85%;">車庫</div>
+    <div class="stop" id="koudai" style="top:20%;">広島工大</div>
+    <div class="stop" id="itsukaichi" style="top:50%;">五日市駅南口</div>
+    <div class="stop" id="depot" style="top:80%;">車庫</div>
   </div>
 
   <script>
@@ -130,8 +130,8 @@
       const line = document.getElementById("line");
       const lineHeight = line.clientHeight;
       const stops = {
-        "広島工大": line.offsetTop + 0.1 * lineHeight,
-        "五日市駅南口": line.offsetTop + 0.55 * lineHeight,
+        "広島工大": line.offsetTop + 0.2 * lineHeight,
+        "五日市駅南口": line.offsetTop + 0.50 * lineHeight,
         "車庫": line.offsetTop + 0.80 * lineHeight
       };
 
@@ -196,6 +196,7 @@
   </script>
 </body>
 </html>
+
 
 
 
