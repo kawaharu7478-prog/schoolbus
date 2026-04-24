@@ -21,15 +21,29 @@
       z-index: 10;
     }
 
-    /* 車両選択ボタンエリア */
+    /* 車両選択ボタンエリア：左下に縦並び */
     #vehicleSelector {
       position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+      bottom: 20px; /* 下からの距離 */
+      left: 20px;   /* 左からの距離 */
       display: flex;
-      gap: 15px;
+      flex-direction: column; /* 縦並びに変更 */
+      gap: 10px;    /* ボタン同士の間隔 */
       z-index: 100;
+    }
+
+    .v-btn {
+      background: orange;
+      color: white;
+      border: none;
+      padding: 12px 18px; /* 少し押しやすく調整 */
+      border-radius: 8px; /* 丸みを少し抑えてリストっぽく */
+      font-weight: bold;
+      box-shadow: 2px 4px 10px rgba(0,0,0,0.2);
+      cursor: pointer;
+      font-size: 14px;
+      text-align: center;
+      min-width: 100px; /* 幅を揃える */
     }
 
     .v-btn {
