@@ -7,7 +7,7 @@
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>バス走行位置表示</title>
+  <title>バス走行位置表示 & 運用ドロワー</title>
   <style>
     body {
       margin: 0;
@@ -34,7 +34,6 @@
       align-items: center;
     }
 
-    /* ▼ オレンジラインを太くする（4px → 8px） */
     .center-line {
       position: relative;
       width: 16px;
@@ -52,15 +51,16 @@
       padding: 3px 8px;
       border: 1px solid #ddd;
       border-radius: 8px;
+      white-space: nowrap;
     }
 
     .bus {
       position: absolute;
       width: 80px;
       transition: top 1s linear;
+      cursor: pointer; /* クリック可能であることを示す */
     }
 
-    /* ▼ バスの左右位置を広げてラインから少し離す */
     .left {
       left: calc(50% - 130px); 
     }
@@ -68,18 +68,84 @@
     .right {
       left: calc(50% + 100px);  
     }
+
+    /* --- ドロワーUIのスタイル --- */
+    #bottomSheet {
+      position: fixed;
+      bottom: -100%;
+      left: 0;
+      width: 100%;
+      height: 70vh;
+      background: white;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      box-shadow: 0 -5px 15px rgba(0,0,0,0.3);
+      z-index: 2000;
+      transition: bottom 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #drawerHandle {
+      width: 100%;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    #drawerHandle span {
+      width: 40px;
+      height: 5px;
+      background: #ccc;
+      border-radius: 5px;
+    }
+
+    #drawerScrollArea {
+      padding: 0 20px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.4);
+      z-index: 1500;
+    }
   </style>
 </head>
 <body>
+
   <div id="currentTime"></div>
-  <div class="map">
+
+  <div class="map" id="mapContainer">
     <div class="center-line" id="line"></div>
     <div class="stop" id="koudai" style="top:10%;">広島工大</div>
     <div class="stop" id="itsukaichi" style="top:55%;">五日市駅南口</div>
     <div class="stop" id="depot" style="top:80%;">車庫</div>
   </div>
 
+  <div id="overlay" onclick="closeDrawer()"></div>
+  <div id="bottomSheet">
+    <div id="drawerHandle" onclick="closeDrawer()">
+      <span></span>
+    </div>
+    <div id="drawerScrollArea">
+      <h3 id="drawerTitle" style="margin: 0 0 15px; border-bottom: 2px solid orange; padding-bottom: 10px;">車両詳細</h3>
+      <div id="drawerContent">
+        <img id="drawerImage" src="" style="width: 100%; height: auto; border-radius: 8px; display: block;">
+      </div>
+    </div>
+  </div>
+
   <script>
+    // 時計更新
     function updateClock() {
       const now = new Date();
       document.getElementById("currentTime").textContent = now.toLocaleTimeString();
@@ -87,12 +153,14 @@
     setInterval(updateClock, 1000);
     updateClock();
 
+    // CSV読み込み
     async function loadCSV() {
       const response = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
       const text = await response.text();
       return text.trim();
     }
 
+    // アイコン取得（キャッシュ回避付き）
     function getBusIcon(type) {
       const timestamp = Date.now();
       if (type === "1") return `2995.png?v=${timestamp}`;
@@ -100,6 +168,7 @@
       return "";
     }
 
+    // CSVパース
     function parseCSV(csv) {
       const lines = csv.split("\n");
       const header = lines[0].split(",");
@@ -126,6 +195,13 @@
       return pos1 + (pos2 - pos1) * ratio;
     }
 
+    // ドロワーを閉じる
+    function closeDrawer() {
+      document.getElementById("bottomSheet").style.bottom = "-100%";
+      document.getElementById("overlay").style.display = "none";
+    }
+
+    // バス描画
     function drawBus(busData, nowMinutes) {
       const line = document.getElementById("line");
       const lineHeight = line.clientHeight;
@@ -170,6 +246,25 @@
           busEl.src = getBusIcon(bustype);
           busEl.alt = "バス";
           busEl.className = `bus ${dir === "up" ? "left" : "right"}`;
+          
+          // クリックイベントの登録
+          busEl.onclick = () => {
+            const sheet = document.getElementById("bottomSheet");
+            const overlay = document.getElementById("overlay");
+            const drawerImg = document.getElementById("drawerImage");
+            const drawerTitle = document.getElementById("drawerTitle");
+
+            let vehicleId = (bustype === "1") ? "2995" : "2694";
+            
+            // ドロワーの中身を更新
+            drawerImg.src = `${vehicleId}_unyou.png?v=${Date.now()}`;
+            drawerTitle.textContent = `${vehicleId} 号車の本日の運用`;
+
+            // ドロワーを表示
+            sheet.style.bottom = "0";
+            overlay.style.display = "block";
+          };
+
           document.body.appendChild(busEl);
         }
 
@@ -196,12 +291,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
