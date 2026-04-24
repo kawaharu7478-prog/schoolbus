@@ -2,10 +2,6 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>バス走行位置表示 & 運用ドロワー</title>
   <style>
@@ -23,6 +19,34 @@
       font-size: 20px;
       color: #333;
       z-index: 10;
+    }
+
+    /* 車両選択ボタンエリア */
+    #vehicleSelector {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 15px;
+      z-index: 100;
+    }
+
+    .v-btn {
+      background: orange;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 25px;
+      font-weight: bold;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .v-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 3px rgba(0,0,0,0.2);
     }
 
     .map {
@@ -58,24 +82,19 @@
       position: absolute;
       width: 80px;
       transition: top 1s linear;
-      cursor: pointer; /* クリック可能であることを示す */
+      cursor: pointer;
     }
 
-    .left {
-      left: calc(50% - 130px); 
-    }
+    .left { left: calc(50% - 130px); }
+    .right { left: calc(50% + 100px); }
 
-    .right {
-      left: calc(50% + 100px);  
-    }
-
-    /* --- ドロワーUIのスタイル --- */
+    /* ドロワーUI */
     #bottomSheet {
       position: fixed;
       bottom: -100%;
       left: 0;
       width: 100%;
-      height: 70vh;
+      height: 75vh;
       background: white;
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
@@ -124,18 +143,21 @@
 
   <div id="currentTime"></div>
 
+  <div id="vehicleSelector">
+    <button class="v-btn" onclick="openDrawer('2694')">2694 運用</button>
+    <button class="v-btn" onclick="openDrawer('2995')">2995 運用</button>
+  </div>
+
   <div class="map" id="mapContainer">
     <div class="center-line" id="line"></div>
-    <div class="stop" id="koudai" style="top:10%;">広島工大</div>
-    <div class="stop" id="itsukaichi" style="top:55%;">五日市駅南口</div>
-    <div class="stop" id="depot" style="top:80%;">車庫</div>
+    <div class="stop" style="top:10%;">広島工大</div>
+    <div class="stop" style="top:55%;">五日市駅南口</div>
+    <div class="stop" style="top:80%;">車庫</div>
   </div>
 
   <div id="overlay" onclick="closeDrawer()"></div>
   <div id="bottomSheet">
-    <div id="drawerHandle" onclick="closeDrawer()">
-      <span></span>
-    </div>
+    <div id="drawerHandle" onclick="closeDrawer()"><span></span></div>
     <div id="drawerScrollArea">
       <h3 id="drawerTitle" style="margin: 0 0 15px; border-bottom: 2px solid orange; padding-bottom: 10px;">車両詳細</h3>
       <div id="drawerContent">
@@ -145,30 +167,48 @@
   </div>
 
   <script>
-    // 時計更新
     function updateClock() {
-      const now = new Date();
-      document.getElementById("currentTime").textContent = now.toLocaleTimeString();
+      document.getElementById("currentTime").textContent = new Date().toLocaleTimeString();
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    // CSV読み込み
     async function loadCSV() {
       const response = await fetch(`timetable.csv?v=${Date.now()}`, { cache: "no-store" });
-      const text = await response.text();
-      return text.trim();
+      return (await response.text()).trim();
     }
 
-    // アイコン取得（キャッシュ回避付き）
     function getBusIcon(type) {
-      const timestamp = Date.now();
-      if (type === "1") return `2995.png?v=${timestamp}`;
-      if (type === "2") return `2694.png?v=${timestamp}`;
-      return "";
+      const vId = (type === "1") ? "2995" : "2694";
+      return `${vId}.png?v=${Date.now()}`;
     }
 
-    // CSVパース
+    // ドロワーを開く（共通関数）
+    function openDrawer(vehicleId) {
+      const sheet = document.getElementById("bottomSheet");
+      const overlay = document.getElementById("overlay");
+      const drawerImg = document.getElementById("drawerImage");
+      const drawerTitle = document.getElementById("drawerTitle");
+
+      // 正しいファイル名に合わせること（例：2694unyou.png か 2694_unyou.png か）
+      const fileName = `${vehicleId}unyou.png`; 
+      
+      drawerImg.src = `${fileName}?v=${Date.now()}`;
+      drawerTitle.textContent = `${vehicleId} 号車の本日の運用`;
+
+      sheet.style.bottom = "0";
+      overlay.style.display = "block";
+
+      drawerImg.onerror = () => {
+        drawerTitle.textContent = `${vehicleId} 号車の画像が見つかりません (${fileName})`;
+      };
+    }
+
+    function closeDrawer() {
+      document.getElementById("bottomSheet").style.bottom = "-100%";
+      document.getElementById("overlay").style.display = "none";
+    }
+
     function parseCSV(csv) {
       const lines = csv.split("\n");
       const header = lines[0].split(",");
@@ -187,106 +227,56 @@
     }
 
     function interpolate(pos1, pos2, t1, t2, now) {
-      if (t1 === null || t2 === null) return null;
-      const minT = Math.min(t1, t2);
-      const maxT = Math.max(t1, t2);
-      if (now < minT || now > maxT) return null;
-      const ratio = (now - t1) / (t2 - t1);
-      return pos1 + (pos2 - pos1) * ratio;
+      if (t1 === null || t2 === null || now < Math.min(t1, t2) || now > Math.max(t1, t2)) return null;
+      return pos1 + (pos2 - pos1) * ((now - t1) / (t2 - t1));
     }
 
-    // ドロワーを閉じる
-    function closeDrawer() {
-      document.getElementById("bottomSheet").style.bottom = "-100%";
-      document.getElementById("overlay").style.display = "none";
-    }
-
-    // バス描画
     function drawBus(busData, nowMinutes) {
       const line = document.getElementById("line");
-      const lineHeight = line.clientHeight;
-      const stops = {
-        "広島工大": line.offsetTop + 0.1 * lineHeight,
-        "五日市駅南口": line.offsetTop + 0.55 * lineHeight,
-        "車庫": line.offsetTop + 0.80 * lineHeight
-      };
+      const h = line.clientHeight;
+      const offset = line.offsetTop;
+      const stops = { "広島工大": offset + 0.1*h, "五日市駅南口": offset + 0.55*h, "車庫": offset + 0.8*h };
 
       busData.forEach((bus, idx) => {
-        const bustype = bus.bustype;
         const dir = bus.direction;
-        const startStop = dir === "up" ? "車庫" : "広島工大";
-        const midStop = "五日市駅南口";
-        const endStop = dir === "up" ? "広島工大" : "車庫";
-
-        const times = [
-          { stop: startStop, time: timeToMinutes(bus[startStop]) },
-          { stop: midStop, time: timeToMinutes(bus[midStop]) },
-          { stop: endStop, time: timeToMinutes(bus[endStop]) }
-        ].filter(x => x.time !== null);
-
-        if (times.length < 2) return;
+        const vId = (bus.bustype === "1") ? "2995" : "2694";
+        const route = [
+          { s: dir === "up" ? "車庫" : "広島工大", t: timeToMinutes(bus[dir === "up" ? "車庫" : "広島工大"]) },
+          { s: "五日市駅南口", t: timeToMinutes(bus["五日市駅南口"]) },
+          { s: dir === "up" ? "広島工大" : "車庫", t: timeToMinutes(bus[dir === "up" ? "広島工大" : "車庫"]) }
+        ].filter(x => x.t !== null);
 
         let posY = null;
-        for (let i = 0; i < times.length - 1; i++) {
-          const t1 = times[i], t2 = times[i + 1];
-          posY = interpolate(stops[t1.stop], stops[t2.stop], t1.time, t2.time, nowMinutes);
+        for (let i = 0; i < route.length - 1; i++) {
+          posY = interpolate(stops[route[i].s], stops[route[i+1].s], route[i].t, route[i+1].t, nowMinutes);
           if (posY !== null) break;
         }
 
         const existing = document.getElementById(`bus-${idx}`);
-        if (!posY) {
-          if (existing) existing.style.display = "none";
-          return;
-        }
+        if (!posY) { if (existing) existing.style.display = "none"; return; }
 
-        let busEl = existing;
-        if (!busEl) {
-          busEl = document.createElement("img");
+        let busEl = existing || document.createElement("img");
+        if (!existing) {
           busEl.id = `bus-${idx}`;
-          busEl.src = getBusIcon(bustype);
-          busEl.alt = "バス";
           busEl.className = `bus ${dir === "up" ? "left" : "right"}`;
-          
-          // クリックイベントの登録
-          busEl.onclick = () => {
-            const sheet = document.getElementById("bottomSheet");
-            const overlay = document.getElementById("overlay");
-            const drawerImg = document.getElementById("drawerImage");
-            const drawerTitle = document.getElementById("drawerTitle");
-
-            let vehicleId = (bustype === "1") ? "2995" : "2694";
-            
-            // ドロワーの中身を更新
-            drawerImg.src = `${vehicleId}_unyou.png?v=${Date.now()}`;
-            drawerTitle.textContent = `${vehicleId} 号車の本日の運用`;
-
-            // ドロワーを表示
-            sheet.style.bottom = "0";
-            overlay.style.display = "block";
-          };
-
+          busEl.onclick = () => openDrawer(vId);
           document.body.appendChild(busEl);
         }
-
+        busEl.src = getBusIcon(bus.bustype);
         busEl.style.display = "block";
         busEl.style.top = `${posY}px`;
       });
     }
 
     async function main() {
-      const csvText = await loadCSV();
-      const busData = parseCSV(csvText);
-
-      function tick() {
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-        drawBus(busData, nowMinutes);
-      }
-
+      const busData = parseCSV(await loadCSV());
+      const tick = () => {
+        const n = new Date();
+        drawBus(busData, n.getHours()*60 + n.getMinutes() + n.getSeconds()/60);
+      };
       tick();
       setInterval(tick, 1000);
     }
-
     main();
   </script>
 </body>
