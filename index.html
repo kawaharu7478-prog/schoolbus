@@ -46,18 +46,6 @@
       min-width: 100px; /* 幅を揃える */
     }
 
-    .v-btn {
-      background: orange;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 25px;
-      font-weight: bold;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-      cursor: pointer;
-      font-size: 16px;
-    }
-
     .v-btn:active {
       transform: translateY(2px);
       box-shadow: 0 2px 3px rgba(0,0,0,0.2);
@@ -158,8 +146,8 @@
   <div id="currentTime"></div>
 
   <div id="vehicleSelector">
-    <button class="v-btn" onclick="openDrawer('2694')">(2,3便)2694 運用</button>
-    <button class="v-btn" onclick="openDrawer('2995')">(1便)2995 運用</button>
+    <button class="v-btn" onclick="openDrawer('2,3便')">2,3便 運用</button>
+    <button class="v-btn" onclick="openDrawer('1便')">1便 運用</button>
   </div>
 
   <div class="map" id="mapContainer">
@@ -193,7 +181,7 @@
     }
 
     function getBusIcon(type) {
-      const vId = (type === "1") ? "2995" : "2694";
+      const vId = (type === "1") ? "1便" : "2,3便";
       return `${vId}.png?v=${Date.now()}`;
     }
 
@@ -204,7 +192,7 @@
       const drawerImg = document.getElementById("drawerImage");
       const drawerTitle = document.getElementById("drawerTitle");
 
-      // 正しいファイル名に合わせること（例：2694unyou.png か 2694_unyou.png か）
+      // 正しいファイル名に合わせること（例：2,3便unyou.png か 2,3便_unyou.png か）
       const fileName = `${vehicleId}unyou.png`; 
       
       drawerImg.src = `${fileName}?v=${Date.now()}`;
@@ -214,7 +202,7 @@
       overlay.style.display = "block";
 
       drawerImg.onerror = () => {
-        drawerTitle.textContent = `${vehicleId} 号車の画像が見つかりません (${fileName})`;
+        drawerTitle.textContent = `${vehicleId} の画像が見つかりません (${fileName})`;
       };
     }
 
@@ -253,7 +241,7 @@
 
       busData.forEach((bus, idx) => {
         const dir = bus.direction;
-        const vId = (bus.bustype === "1") ? "2995" : "2694";
+        const vId = (bus.bustype === "1") ? "1便" : "2,3便";
         const route = [
           { s: dir === "up" ? "車庫" : "広島工大", t: timeToMinutes(bus[dir === "up" ? "車庫" : "広島工大"]) },
           { s: "五日市駅南口", t: timeToMinutes(bus["五日市駅南口"]) },
