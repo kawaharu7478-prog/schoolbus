@@ -234,6 +234,10 @@
       "不明": "0000.png"
     };
 
+    // グローバル変数で現在の状態を保持（描画のたびにlocalStorageを読み直さないようにする）
+    let currentTrip1 = "不明";
+    let currentTrip2 = "不明";
+
     function updateClock() {
       document.getElementById("currentTime").textContent = new Date().toLocaleTimeString();
     }
@@ -250,28 +254,30 @@
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    function getActiveUnyou() {
+    // 画面起動時に一度だけ実行する、運用データの初期化関数
+    function initUnyouData() {
       const savedDate = localStorage.getItem("unyou_date");
       const today = getTodayString();
 
       if (savedDate !== today) {
+        // 日付が変わっとったら「不明」でリセット
         localStorage.setItem("unyou_date", today);
         localStorage.setItem("unyou_trip1", "不明");
         localStorage.setItem("unyou_trip2", "不明");
-        
-        document.getElementById("select-trip1").value = "不明";
-        document.getElementById("select-trip2").value = "不明";
-        return { trip1: "不明", trip2: "不明" };
+        currentTrip1 = "不明";
+        currentTrip2 = "不明";
+      } else {
+        // 同じ日付なら保存データを読み込む
+        currentTrip1 = localStorage.getItem("unyou_trip1") || "不明";
+        currentTrip2 = localStorage.getItem("unyou_trip2") || "不明";
       }
 
-      const t1 = localStorage.getItem("unyou_trip1") || "不明";
-      const t2 = localStorage.getItem("unyou_trip2") || "不明";
-      document.getElementById("select-trip1").value = t1;
-      document.getElementById("select-trip2").value = t2;
-
-      return { trip1: t1, trip2: t2 };
+      // プルダウンの選択状態に反映
+      document.getElementById("select-trip1").value = currentTrip1;
+      document.getElementById("select-trip2").value = currentTrip2;
     }
 
+    // 投稿ボタンを押した時の処理
     function saveUnyou() {
       const t1 = document.getElementById("select-trip1").value;
       const t2 = document.getElementById("select-trip2").value;
@@ -280,25 +286,26 @@
       localStorage.setItem("unyou_trip1", t1);
       localStorage.setItem("unyou_trip2", t2);
       
+      currentTrip1 = t1;
+      currentTrip2 = t2;
+      
       alert("運用を更新しました。");
-      location.reload();
+      location.reload(); // 再読み込みして最新状態を描画に反映
     }
 
+    // バスアイコンの画像パスを決定する関数（毎秒呼び出される）
     function getBusIcon(bustype) {
-      const unyou = getActiveUnyou();
-      const selectedVehicle = (bustype === "1") ? unyou.trip1 : unyou.trip2;
+      const selectedVehicle = (bustype === "1") ? currentTrip1 : currentTrip2;
       const imageName = vehicleImages[selectedVehicle] || "0000.png";
       return `${imageName}?v=${Date.now()}`;
     }
 
-    // 左下のボタンから呼び出されるドロワー表示関数
     function openDrawer(tripName) {
       const sheet = document.getElementById("bottomSheet");
       const overlay = document.getElementById("overlay");
       const drawerImg = document.getElementById("drawerImage");
       const drawerTitle = document.getElementById("drawerTitle");
 
-      // 1便unyou.png または 2便unyou.png を参照
       const fileName = `${tripName}unyou.png`; 
       
       drawerImg.src = `${fileName}?v=${Date.now()}`;
@@ -375,7 +382,9 @@
     }
 
     async function main() {
-      getActiveUnyou();
+      // 起動時に【一度だけ】データを読み込み、日付チェックをする
+      initUnyouData();
+      
       const busData = parseCSV(await loadCSV());
       const tick = () => {
         const n = new Date();
