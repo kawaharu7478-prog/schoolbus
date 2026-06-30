@@ -21,7 +21,7 @@
       z-index: 10;
     }
 
-    /* 車両選択ボタンエリア：左下に縦並び */
+    /* 車労選択ボタンエリア：左下に縦並び */
     #vehicleSelector {
       position: fixed;
       bottom: 20px; /* 下からの距離 */
@@ -146,7 +146,7 @@
   <div id="currentTime"></div>
 
   <div id="vehicleSelector">
-    <button class="v-btn" onclick="openDrawer('2,3便')">2,3便 運用</button>
+    <button class="v-btn" onclick="openDrawer('2便')">2便 運用</button>
     <button class="v-btn" onclick="openDrawer('1便')">1便 運用</button>
   </div>
 
@@ -181,7 +181,7 @@
     }
 
     function getBusIcon(type) {
-      const vId = (type === "1") ? "1便" : "2,3便";
+      const vId = (type === "1") ? "1便" : "2便";
       return `${vId}.png?v=${Date.now()}`;
     }
 
@@ -192,7 +192,7 @@
       const drawerImg = document.getElementById("drawerImage");
       const drawerTitle = document.getElementById("drawerTitle");
 
-      // 正しいファイル名に合わせること（例：2,3便unyou.png か 2,3便_unyou.png か）
+      // 正しいファイル名に合わせること（例：2便unyou.png か 2便_unyou.png か）
       const fileName = `${vehicleId}unyou.png`; 
       
       drawerImg.src = `${fileName}?v=${Date.now()}`;
@@ -241,7 +241,7 @@
 
       busData.forEach((bus, idx) => {
         const dir = bus.direction;
-        const vId = (bus.bustype === "1") ? "1便" : "2,3便";
+        const vId = (bus.bustype === "1") ? "1便" : "2便";
         const route = [
           { s: dir === "up" ? "車庫" : "広島工大", t: timeToMinutes(bus[dir === "up" ? "車庫" : "広島工大"]) },
           { s: "五日市駅南口", t: timeToMinutes(bus["五日市駅南口"]) },
