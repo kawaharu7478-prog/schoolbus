@@ -21,7 +21,7 @@
       z-index: 10;
     }
 
-    /* 運用投稿エリア（左下） */
+    /* 運用投稿・確認エリア（左下） */
     #postContainer {
       position: fixed;
       bottom: 20px;
@@ -46,7 +46,7 @@
     .post-row label {
       font-size: 14px;
       font-weight: bold;
-      width: 45px;
+      width: 35px;
     }
 
     select {
@@ -60,15 +60,28 @@
       background: orange;
       color: white;
       border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .submit-btn {
+      background: #333;
+      color: white;
+      border: none;
       padding: 8px 12px;
       border-radius: 6px;
       font-weight: bold;
       cursor: pointer;
       font-size: 14px;
       text-align: center;
+      margin-top: 5px;
     }
 
-    .v-btn:active {
+    .v-btn:active, .submit-btn:active {
       transform: translateY(1px);
     }
 
@@ -105,13 +118,62 @@
       position: absolute;
       width: 80px;
       transition: top 1s linear;
-      /* タップ時のポップアップ廃止に伴い、カーソルとポインターイベントを無効化 */
       cursor: default;
       pointer-events: none; 
     }
 
     .left { left: calc(50% - 130px); }
     .right { left: calc(50% + 100px); }
+
+    /* ドロワーUI */
+    #bottomSheet {
+      position: fixed;
+      bottom: -100%;
+      left: 0;
+      width: 100%;
+      height: 75vh;
+      background: white;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      box-shadow: 0 -5px 15px rgba(0,0,0,0.3);
+      z-index: 2000;
+      transition: bottom 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #drawerHandle {
+      width: 100%;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    #drawerHandle span {
+      width: 40px;
+      height: 5px;
+      background: #ccc;
+      border-radius: 5px;
+    }
+
+    #drawerScrollArea {
+      padding: 0 20px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.4);
+      z-index: 1500;
+    }
   </style>
 </head>
 <body>
@@ -119,7 +181,7 @@
   <div id="currentTime"></div>
 
   <div id="postContainer">
-    <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid orange; padding-bottom: 5px; margin-bottom: 5px;">運用投稿</div>
+    <div style="font-size: 14px; font-weight: bold; border-bottom: 2px solid orange; padding-bottom: 5px; margin-bottom: 5px;">運用管理</div>
     <div class="post-row">
       <label>1便:</label>
       <select id="select-trip1">
@@ -129,6 +191,7 @@
         <option value="ガーラ">ガーラ</option>
         <option value="ふそう">ふそう</option>
       </select>
+      <button class="v-btn" onclick="openDrawer('1便')">運用を見る</button>
     </div>
     <div class="post-row">
       <label>2便:</label>
@@ -139,8 +202,9 @@
         <option value="ガーラ">ガーラ</option>
         <option value="ふそう">ふそう</option>
       </select>
+      <button class="v-btn" onclick="openDrawer('2便')">運用を見る</button>
     </div>
-    <button class="v-btn" onclick="saveUnyou()">投稿する</button>
+    <button class="submit-btn" onclick="saveUnyou()">変更を投稿する</button>
   </div>
 
   <div class="map" id="mapContainer">
@@ -150,8 +214,18 @@
     <div class="stop" style="top:80%;">車庫</div>
   </div>
 
+  <div id="overlay" onclick="closeDrawer()"></div>
+  <div id="bottomSheet">
+    <div id="drawerHandle" onclick="closeDrawer()"><span></span></div>
+    <div id="drawerScrollArea">
+      <h3 id="drawerTitle" style="margin: 0 0 15px; border-bottom: 2px solid orange; padding-bottom: 10px;">車両詳細</h3>
+      <div id="drawerContent">
+        <img id="drawerImage" src="" style="width: 100%; height: auto; border-radius: 8px; display: block;">
+      </div>
+    </div>
+  </div>
+
   <script>
-    // 車両名と画像ファイルの紐付け設定
     const vehicleImages = {
       "2694": "2694.png",
       "2995": "2995.png",
@@ -171,30 +245,25 @@
       return (await response.text()).trim();
     }
 
-    // 今日の日付文字列（YYYY-MM-DD）を取得する関数
     function getTodayString() {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    // 保持された運用データを取得（日付が変わっていればリセットして 0000.png にする）
     function getActiveUnyou() {
       const savedDate = localStorage.getItem("unyou_date");
       const today = getTodayString();
 
-      // 日付が違う、またはデータがない場合は「不明（0000.png）」で初期化
       if (savedDate !== today) {
         localStorage.setItem("unyou_date", today);
         localStorage.setItem("unyou_trip1", "不明");
         localStorage.setItem("unyou_trip2", "不明");
         
-        // プルダウンの表示も「不明」にリセット
         document.getElementById("select-trip1").value = "不明";
         document.getElementById("select-trip2").value = "不明";
         return { trip1: "不明", trip2: "不明" };
       }
 
-      // 保存されている値があればそれを使い、プルダウンにも反映
       const t1 = localStorage.getItem("unyou_trip1") || "不明";
       const t2 = localStorage.getItem("unyou_trip2") || "不明";
       document.getElementById("select-trip1").value = t1;
@@ -203,7 +272,6 @@
       return { trip1: t1, trip2: t2 };
     }
 
-    // 投稿ボタンを押した時の処理
     function saveUnyou() {
       const t1 = document.getElementById("select-trip1").value;
       const t2 = document.getElementById("select-trip2").value;
@@ -213,19 +281,40 @@
       localStorage.setItem("unyou_trip2", t2);
       
       alert("運用を更新しました。");
-      // バス画像を即時再描画させるためにリロード、またはメイン処理を再度走らせる
       location.reload();
     }
 
-    // バスアイコンの画像パスを決定する関数
     function getBusIcon(bustype) {
       const unyou = getActiveUnyou();
-      // bustypeが"1"なら1便の選択、それ以外なら2便の選択を参照
       const selectedVehicle = (bustype === "1") ? unyou.trip1 : unyou.trip2;
       const imageName = vehicleImages[selectedVehicle] || "0000.png";
-      
-      // GitHub上のパス（※HTMLと同階層、または相対パスを想定。必要に応じてURLを付与してください）
       return `${imageName}?v=${Date.now()}`;
+    }
+
+    // 左下のボタンから呼び出されるドロワー表示関数
+    function openDrawer(tripName) {
+      const sheet = document.getElementById("bottomSheet");
+      const overlay = document.getElementById("overlay");
+      const drawerImg = document.getElementById("drawerImage");
+      const drawerTitle = document.getElementById("drawerTitle");
+
+      // 1便unyou.png または 2便unyou.png を参照
+      const fileName = `${tripName}unyou.png`; 
+      
+      drawerImg.src = `${fileName}?v=${Date.now()}`;
+      drawerTitle.textContent = `${tripName} の運用`;
+
+      sheet.style.bottom = "0";
+      overlay.style.display = "block";
+
+      drawerImg.onerror = () => {
+        drawerTitle.textContent = `${tripName} の画像が見つかりません (${fileName})`;
+      };
+    }
+
+    function closeDrawer() {
+      document.getElementById("bottomSheet").style.bottom = "-100%";
+      document.getElementById("overlay").style.display = "none";
     }
 
     function parseCSV(csv) {
@@ -277,7 +366,6 @@
         if (!existing) {
           busEl.id = `bus-${idx}`;
           busEl.className = `bus ${dir === "up" ? "left" : "right"}`;
-          // タップ時ポップアップ（ドロワー）廃止のため、onclickを削除
           document.body.appendChild(busEl);
         }
         busEl.src = getBusIcon(bus.bustype);
@@ -287,9 +375,7 @@
     }
 
     async function main() {
-      // 起動時に一度プルダウンの状態を同期
       getActiveUnyou();
-      
       const busData = parseCSV(await loadCSV());
       const tick = () => {
         const n = new Date();
